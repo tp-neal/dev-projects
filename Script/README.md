@@ -2,10 +2,16 @@
 
 ## Overview:
 
-This program takes a command typed in the terminal, and logs its ouput
-and error information to a specified directory. The output and error 
-information is also then displayed to the terminal, as if it weren't
-intercepted.
+This program provides functionality for managing multiple file
+descriptors, creating files and directories, and piping data
+between processes. Its primary use-case is to execute a given
+command, log its input, output, and errors to respective files,
+and display the command's output and errors in real-time to the
+terminal.
+
+The program ensures proper cleanup of opened file descriptors
+in error scenarios and executes the given command using a
+child process.
 
 ## Constraints:
 
@@ -42,4 +48,4 @@ intercepted.
 2. Make clean
 3. Make all
 4. Run the program with optional parameters
-**(note: the makefile assumes the log directory name of 'log' upon cleanup)**
+**(note: the makefile assumes the log directory name of 'dir', and a program error log of 'err_log' upon cleanup)**

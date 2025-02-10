@@ -11,7 +11,7 @@ hscript.o: hscript.c hscript.h
 	$(CC) $(CFLAGS) -c hscript.c
 
 clean:
-	rm -f hscript outfile hscript.o
-	rm -f -r log
+	rm -f $(TARGET) *.o err_log
+	rm -f -r dir
 
 .PHONY: all clean

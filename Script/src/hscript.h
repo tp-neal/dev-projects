@@ -2,14 +2,22 @@
  * Project Name: Hscript
  * Author: Tyler Neal
  * File: hscript.h
- * Date: 1/31/2025
+ * Date: 2/10/2025
  *
- * File Description:
- * This file contains 
- * 
+ * Description:
+ * This program provides functionality for managing multiple file
+ * descriptors, creating files and directories, and piping data
+ * between processes. Its primary use-case is to execute a given
+ * command, log its input, output, and errors to respective files,
+ * and display the command's output and errors in real-time to the
+ * terminal.
+ *
+ * The program ensures proper cleanup of opened file descriptors
+ * in error scenarios and executes the given command using a
+ * child process.
  *
  * Argument format:
- * ./hscript <program name> <arguments> <directory>
+ * ./hscript <program name> <arguments> <log_directory_name>
  ******************************************************************/
 
 #ifndef HSCRIPT_H
@@ -27,15 +35,17 @@
 #include <stdbool.h>
 
 #define MAX_FDS 9 // Number of FDS an FD_Manager can track
-#define BUFFER_SIZE 1024
-#define DEBUG 1
+#define BUFFER_SIZE 1024 // Buffer size used to write to fds in transferData()
 
 //==================================================================
 //                           Error Handling
 //==================================================================
 
 /**
- * @brief - Checks for function return error codes, and passes them up callstack
+ * @brief Calls a function and checks for an error code. If an error
+ * is detected, it will return the same code. Allows simple passing
+ * of error codes to main, where errors are handled.
+ * 
  */
 #define CE(call) do { \
     int status = (call); \
@@ -44,6 +54,13 @@
     } \
 } while(0) 
 
+/**
+ * @brief Calls a function and checks for an error code. If an error
+ * is detected, it prints the error string, and calls provided clean
+ * -up function. Often used in main to cleanup the function once a
+ * terminal error is encountered.
+ * 
+ */
 #define CEC(call, print, cleanup) do { \
     int status = (call); \
     if (status != 0) {\
@@ -55,14 +72,11 @@
     } \
 } while(0) 
 
-typedef enum {
-    PRE_FORK = 0,
-    CHILD = 1,
-    PARENT = 2
-} proc_type_t;
-
 /**
- * @brief - Contains different error codes for debuggin purposes
+ * @brief Contains error codes relating to various potential issues
+ * encountered during runtime. Error codes are passed upwards to main
+ * for debugging and error handling.
+ * 
  */
 typedef enum {
     SUCCESS = 0,
@@ -71,6 +85,7 @@ typedef enum {
     ERR_FILE_OPEN = -100,
     ERR_FILE_READ = -101,
     ERR_FILE_WRITE = -102,
+    ERR_LOG_FILE_OPEN = -103,
 
     // Pipe creation
     ERR_PIPE_CREATE = -200,
@@ -89,16 +104,29 @@ typedef enum {
     ERR_INVALID_USAGE = -500,
 
     // Environmental Management
-    ERR_STREAM_REDIRECT = -600
+    ERR_STREAM_REDIRECT = -600,
+    ERR_FORKING = -601
 
 } script_error_t;
 
 //==================================================================
-//                       Structure Declarations 
+//            Evironmental Management Structures/Enums
 //==================================================================
 
 /**
- * @brief - Holds info for managing file descriptors
+ * @brief Used for debug printing. Helps describe which process printed
+ * the error info. Dedicated enumeration for clarity.
+ * 
+ */
+typedef enum {
+    PRE_FORK = 0,
+    CHILD = 1,
+    PARENT = 2
+} proc_type_t;
+
+/**
+ * @brief - Struct containing opened file descriptors, allows for easy
+ * and abrupt file descriptor cleanup.
  */
 typedef struct {
     int fd_arr[MAX_FDS];
@@ -106,7 +134,8 @@ typedef struct {
 } FD_Manager;
 
 /**
- * @brief - Contains file stream info for stream redirection
+ * @brief - Contains file stream info for stream redirection such as
+ * file descriptor, path, and a pipe.
  */
 typedef struct {
     int fd;
@@ -115,7 +144,7 @@ typedef struct {
 } Stream_Info;
 
 /**
- * @brief - Holds info for each filestream
+ * @brief - Holds info for each filestream, input, output, and error.
  */
 typedef struct {
     Stream_Info input;
@@ -124,7 +153,8 @@ typedef struct {
 } Streams;
 
 /**
- * @brief - Container for filesystem environmental info
+ * @brief - Container for filesystem environmental info used for
+ * cleaner argument passing and consolidation.
  */
 typedef struct {
     FD_Manager* fd_mngr;
@@ -142,7 +172,6 @@ int buildEnvironment(Environmental_Info* env_info, int argc, char*** argv);
 int parseArguments(int argc, char*** argv, char** command, char** dirName);
 int initLogFiles(const char* dir_name, FD_Manager* fd_mngr, Streams* streams);
 int initPipes(FD_Manager* fd_mngr, Streams* streams);
-int cleanupDescriptors(Streams* streams);
 int redirectStreams(Streams* streams);
 
 // ------- Directory Management -------
@@ -154,15 +183,14 @@ int createDirectory(const char* dir_name);
 FD_Manager* allocateFDManager();
 int destroyFDManager(FD_Manager* fd_mngr);
 void zeroFDArray(FD_Manager* fd_mngr);
-int closeFD(int fd);
-int cleanupFDManager(FD_Manager* fd_mngr);
 int addFDToManager(int fd, FD_Manager* fd_mngr);
 int closeManagedFD(int fd, FD_Manager* fd_mngr);
+int cleanupFDManager(FD_Manager* fd_mngr);
+int closeFD(int fd);
 
 // -------- Additional Helpers --------
 void printError(int arg_count, char *format, ...);
 int transferData(int srcFD, int logFD, int destFD, const char *logPath, int pipe[]);
-
 void printFDManager(FD_Manager* fd_mngr);
 
 #endif // HSCRIPT_H

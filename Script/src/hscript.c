@@ -2,7 +2,7 @@
  * Project Name: Hscript
  * Author: Tyler Neal
  * File: hscript.c
- * Date: 1/31/2025
+ * Date: 2/10/2025
  *
  * Description:
  * This program provides functionality for managing multiple file
@@ -17,7 +17,7 @@
  * child process.
  *
  * Argument format:
- * ./hscript <program name> <arguments> <directory>
+ * ./hscript <program name> <arguments> ... <log_directory_name>
  ******************************************************************/
 
 #include <sys/stat.h>
@@ -35,8 +35,8 @@
 #include <errno.h>
 #include <stdbool.h>
 
-int log_fd;
-proc_type_t proc_t = PRE_FORK;
+int log_fd; // File descriptor for file in which all error output will be logged
+proc_type_t proc_t = PRE_FORK; // Used for determining which process printed error
 
 //==================================================================
 //                            Main
@@ -44,15 +44,15 @@ proc_type_t proc_t = PRE_FORK;
 
 int main(int argc, char** argv) {
 
-    // Initialize environment
+    // Open file for logging error information
+    log_fd = open("err_log", O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    if (log_fd == -1) {
+        return ERR_LOG_FILE_OPEN;
+    }
+
+    // Initialize environment container
     Environmental_Info env_info = {0};
     Streams* streams = &env_info.streams; // pointer used for visual clarity after forking
-
-    // Open file for status logging
-    log_fd = dup(STDERR_FILENO);
-    if (log_fd < 0) {
-        return ERR_FILE_OPEN; 
-    }
 
     // Build the environment, and catch any errors
     int env_status;
@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
     if (pid < 0) {
         printError(1, "[main] - Error while forking - Info: %s", strerror(errno));
         destroyFDManager(env_info.fd_mngr);
-        return -1;
+        return ERR_FORKING;
     }
 
     // Child (executes command)
@@ -124,7 +124,7 @@ int main(int argc, char** argv) {
         // Continue checking fds until child has finished executing
         while (waitpid(pid, &status, WNOHANG) == 0) {
 
-            // Clear fd_set
+            // Clear fd_set for reselection
             FD_ZERO(&readfds);
 
             // Monitor stdin, stdout, and stderr
@@ -177,12 +177,12 @@ int main(int argc, char** argv) {
 //==================================================================
 
 /**
- * @brief - Sets up environment including directories, logfiles, and piping
+ * @brief Sets up environment including directories, logfiles, and pipe creation
  * 
- * @param env_info - Struct containing information about the file environment
- * @param argc - Number of arguments passed to program
- * @param argv - Array of arguments in the form of character strings
- * @return int - 0 on success : < 0 on error
+ * @param env_info Struct containing information about the file environment
+ * @param argc Number of arguments passed to program
+ * @param argv Pointer to array of arguments in form of strings
+ * @return int 0 on success : (-) on error
  */
 int buildEnvironment(Environmental_Info* env_info, int argc, char*** argv) {
     // Set default fd values to -1
@@ -207,13 +207,14 @@ int buildEnvironment(Environmental_Info* env_info, int argc, char*** argv) {
 }
 
 /**
- * Parses command line arguments for the required command and directory.
+ * @brief Parses command line arguments for the required command and directory.
  * Modifies the argv array to be compatible for the execvp call.
- *
- * @param argc: Number of arguments.
- * @param argv: Array of arguments.
- * @param command: Pointer to store the command to be executed.
- * @param dirName: Pointer to store the directory name.
+ * 
+ * @param argc Number of arguments passed to program
+ * @param argv Array of arguments in form of character arrays
+ * @param command Pointer to command string
+ * @param dirName Pointer to directory name string
+ * @return int 0 on success : (-) on error
  */
 int parseArguments(int argc, char*** argv, char** command, char** dirName) {
     if (argc < 3) {
@@ -241,12 +242,12 @@ int parseArguments(int argc, char*** argv, char** command, char** dirName) {
 }
 
 /**
- * @brief Setups environment, indluding directory creation, file stream path formatting and opening
+ * @brief Opens the files in which the command's stdin, stderr, and stdout will be logged
  * 
- * @param dir_name Name of directory to save file streams in
- * @param input_stream Containter for input stream file descriptor and relative path
- * @param output_stream Containter for output stream file descriptor and relative path
- * @param error_stream Containter for error stream file descriptor and relative path
+ * @param dir_name Directory name for log files to be stored
+ * @param fd_mngr Struct that manages fd's for abrupt cleanup
+ * @param streams Pointer to structs that contain stdin, stderr, and stdout stream info
+ * @return int 0 on success : (-) on error
  */
 int initLogFiles(const char* dir_name, FD_Manager* fd_mngr, Streams* streams) {    
     // Create array for iterating streams
@@ -274,11 +275,11 @@ int initLogFiles(const char* dir_name, FD_Manager* fd_mngr, Streams* streams) {
 }
 
 /**
- * @brief Pipes new filestreams to new log files
+ * @brief Creates pipes for I/O rerouting
  * 
- * @param fd_mngr - Struct containing file descriptor information
- * @param streams - Holds input, output, and error stream info
- * @return int - 0 on success : < 0 on error
+ * @param fd_mngr Struct that manages fd's for abrupt cleanup
+ * @param streams Pointer to structs that contain stdin, stderr, and stdout stream info
+ * @return int 0 on success : (-) on error
  */
 int initPipes(FD_Manager* fd_mngr, Streams* streams) {
     int* stream_pipes[3];
@@ -295,10 +296,10 @@ int initPipes(FD_Manager* fd_mngr, Streams* streams) {
 }
 
 /**
- * @brief Redirects streams to standards
+ * @brief Redirects streams for child (command) process to the created pipes
  * 
- * @param streams - streams
- * @return int 
+ * @param streams Pointer to structs that contain stdin, stderr, and stdout stream info
+ * @return int 0 on success : (-) on error
  */
 int redirectStreams(Streams* streams) {
     if (dup2(streams->input.pipe[0], STDIN_FILENO) == -1 || 
@@ -317,22 +318,19 @@ int redirectStreams(Streams* streams) {
 //==================================================================
 
 /**
- * @brief Create a File object
+ * @brief Open a new file and add its descriptor to the fd manager
  * 
- * @param path path to file concatenated with the filename
- * @return int file descriptor of opened file
+ * @param path Path to file concatenated with the filename
+ * @return int fd of opened file on success : (-) on error
  */
 int createFile(const char* path, mode_t mode, FD_Manager* fd_mngr) {
-    // Attempt to create file
-    int fd;
-    
-    // Default mode
+    // Default mode if necessary
     if (mode == 0) {
         mode = 0644;
     }
 
     // Open file and assign fd
-    fd = open(path, O_CREAT | O_WRONLY | O_TRUNC, mode);
+    int fd = open(path, O_CREAT | O_WRONLY | O_TRUNC, mode);
 
     // Catch error
     if (fd == -1) {
@@ -348,10 +346,10 @@ int createFile(const char* path, mode_t mode, FD_Manager* fd_mngr) {
 }
 
 /**
- * @brief Create a Pipe object
+ * @brief Create a new pipe
  * 
- * @param pipeFD pointer to array of two fds to be piped
- * @return int - 0 on success, exits premptivly on faiure
+ * @param pipeFD Pointer to array of two fds to be piped
+ * @return int 0 on success : (-) on error
  */
 int createPipe(int* pipeFD, FD_Manager* fd_mngr) {
     // Attempt to make pipe, and catch errors
@@ -368,10 +366,10 @@ int createPipe(int* pipeFD, FD_Manager* fd_mngr) {
 }
 
 /**
- * @brief Create a Directory object
+ * @brief Open a new directory
  * 
- * @param dir_name name of directory to be created
- * @return int - 0 on success, exits premptivly on faiure
+ * @param dir_name Name of directory to be created
+ * @return int 0 on success : (-) on error
  */
 int createDirectory(const char* dir_name) {
     // Attempt to make directory, and catch errors
@@ -388,9 +386,9 @@ int createDirectory(const char* dir_name) {
 //==================================================================
 
 /**
- * @brief - Allocated a FD_Manager struct on heap
+ * @brief Allocate an fd manager, zero it out, and return a pointer to it
  * 
- * @return FD_Manager* - Pointer to allocated struct
+ * @return FD_Manager* pointer to the allocated struct
  */
 FD_Manager* allocateFDManager() {
     // Allocate manager struct
@@ -402,27 +400,29 @@ FD_Manager* allocateFDManager() {
 
     // Zero out fd manager array and initialize count
     zeroFDArray(fd_mngr);
-
+    
     return fd_mngr;
 }
 
+/**
+ * @brief Closes all file descriptors stored, and frees the manager memory
+ * 
+ * @param fd_mngr Struct containing the file descriptors to be cleaned up
+ * @return int 0 on success : (-) on error
+ */
 int destroyFDManager(FD_Manager* fd_mngr){
     if (fd_mngr) {
         cleanupFDManager(fd_mngr);
         free(fd_mngr);
         return 0;
-
-        if (DEBUG) {
-        fprintf(stderr, "FD Manager successfully destroyed!\n");
-        }
     }
-    return 1;
+    return -1;
 }
 
 /**
- * @brief - Zeros and fd_manager's array
+ * @brief Zero's out the fd_array to -1's
  * 
- * @param fd_mngr Container for fd list and counter
+ * @param fd_mngr Fd manager struct to be zero'd out
  */
 void zeroFDArray(FD_Manager* fd_mngr) {
     for (int i = 0; i < MAX_FDS; i++){
@@ -432,11 +432,11 @@ void zeroFDArray(FD_Manager* fd_mngr) {
 }
 
 /**
- * @brief Adds an fd to the manager, which is used for closing fds upon early exit
+ * @brief Adds an fd to the manager, so it can be closed upon abrupt exit
  * 
  * @param fd File descriptor to be added to list
  * @param fd_mngr Container for fd list and counter
- * @return int - 0 on success : 1 on failure
+ * @return int 0 on success : (-) on error
  */
 int addFDToManager(int fd, FD_Manager* fd_mngr) {
     // Catch any issues before adding the fd
@@ -459,7 +459,7 @@ int addFDToManager(int fd, FD_Manager* fd_mngr) {
  * 
  * @param fd File descriptor to be closed
  * @param fd_mngr Container for fd list and counter
- * @return int - 0 on success : 1 on failure
+ * @return int 0 on success : (-) on error
  */
 int closeManagedFD(int fd, FD_Manager* fd_mngr) {
     // Catch any issues before closing the fd
@@ -500,6 +500,7 @@ int closeManagedFD(int fd, FD_Manager* fd_mngr) {
  * @breif Closes all file descriptors in the fd manager
  * 
  * @param fd_mngr Container for fd list and counter
+ * @return int 0 on success : (-) on error
  */
 int cleanupFDManager(FD_Manager* fd_mngr) {
     for (int i = fd_mngr->fd_counter-1; i >= 0; i--) {
@@ -514,6 +515,7 @@ int cleanupFDManager(FD_Manager* fd_mngr) {
  * @brief Close a file descriptor, or print error and exit if unable
  * 
  * @param fd File descriptor to be closed
+ * @return int 0 on success : (-) on error
  */
 int closeFD(int fd) {
     // Attempt to close FD
@@ -530,12 +532,15 @@ int closeFD(int fd) {
 //==================================================================
 
 /**
- * @breif Handles an error by printing an error message and closing all file descriptors.
- *
- * @param message: The error message to be printed.
- * @param var: The variable to be printed in the error message.
+ * @brief Prints an error to the logfile
+ * 
+ * @param arg_count Number of format specifiers in formatted string
+ * @param format Formatted string optionally containing specifiers
+ * @param ... variables for string formatting
  */
 void printError(int arg_count, char *format, ...) {
+
+    // Format print string for writing
     va_list args;
     va_start(args, format);
 
@@ -553,26 +558,25 @@ void printError(int arg_count, char *format, ...) {
     }
     len += snprintf(buffer + len, sizeof(buffer) - len, "\n\n");
 
-    // Write to both log and stderr
-    if (log_fd >= 0) {
-        write(log_fd, buffer, len);
-    }
+    // Write to log file
+    write(log_fd, buffer, len);
 
     va_end(args);
     exit(-1);  // Ensure program exits after error
 }
 
 /**
- * @brief 
+ * @brief Writes data to both a log file, and destination fd
  * 
- * @param srcFD 
- * @param logFD 
- * @param destFD 
- * @param logPath 
- * @param pipe 
- * @return int 
+ * @param srcFD File from which data is read
+ * @param logFD Log file to be written to
+ * @param destFD Additional file to be written to
+ * @param logPath Path to the logfile
+ * @param pipe Pipe holding the file descriptors to be read/written from
+ * @return int 0 on success : (-) on error
  */
 int transferData(int srcFD, int logFD, int destFD, const char *logPath, int pipe[]) {
+    // Read from source file
     char buffer[BUFFER_SIZE];
     ssize_t bytes_read = read(srcFD, buffer, BUFFER_SIZE);
     
@@ -588,21 +592,21 @@ int transferData(int srcFD, int logFD, int destFD, const char *logPath, int pipe
         return closeFD(pipe[1]);
     }
 
-    // Write to log file with partial write handling
+    // Write to log file
     ssize_t total_written_log = 0;
     while (total_written_log < bytes_read) {
         ssize_t written = write(logFD, buffer + total_written_log, 
-                              bytes_read - total_written_log);
+                                bytes_read - total_written_log);
         if (written == -1) {
             if (errno == EINTR) continue;  // Retry on interrupt
             printError(1, "[transferData] - Could not write to log file %s: %s", 
-                      logPath, strerror(errno));
+                       logPath, strerror(errno));
             return ERR_FILE_WRITE;
         }
         total_written_log += written;
     }
 
-    // Write to destination with partial write handling
+    // Write to destination
     ssize_t total_written_dest = 0;
     while (total_written_dest < bytes_read) {
         ssize_t written = write(destFD, buffer + total_written_dest, 
@@ -620,9 +624,9 @@ int transferData(int srcFD, int logFD, int destFD, const char *logPath, int pipe
 }
 
 /**
- * @brief 
+ * @brief Prints contents of fd manager to stderr for debugging
  * 
- * @param fd_mngr 
+ * @param fd_mngr Fd manger who's fd array is to be printed
  */
 void printFDManager(FD_Manager* fd_mngr) {
     fprintf(stderr, "{|");
