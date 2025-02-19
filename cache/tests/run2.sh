@@ -1,25 +1,5 @@
 #!/bin/bash
 
-#===========================================================================
-# PROJECT: Direct-Mapped Write-Back Cache [Trace Driven Simulation]
-#===========================================================================
-# NAME : Tyler Neal
-# DATE: 01/09/2025
-# FILE NAME : run2.sh
-# DESCRIPTION:
-#    This script performs a test on the cache under the following assumptions:
-#      1. Only data references will be tested
-#      2. Line size is always 8 words (32 bytes)
-# 
-# Note:
-#   The script will perform tests under every combination of the following 
-#   variables:
-#      Number of Layers:   1, 2, 3
-#      L1 Cache Size:      4KB, 16KB
-#      L2 Cache Size:      32KB, 64KB
-#      L3 Cache Size:      256KB, 1024KB
-#===========================================================================
-
 # PART 2 -------------------------------------
 
 # Filepaths
