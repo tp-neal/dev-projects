@@ -1,9 +1,11 @@
-# Cache Simulator
+# Project: Cache Simulator
+
+## Overview:
 
 A trace-driven cache simulator implementing a direct-mapped write-back cache hierarchy with configurable L1, L2, and L3 caches.
 Designed to test the SPEC95 benchmarks.
 
-## Features
+## Features:
 
 - Supports up to 3-level cache hierarchy
 - Configurable cache and line sizes
@@ -14,7 +16,7 @@ Designed to test the SPEC95 benchmarks.
   - Average Memory Access Time (AMAT)
   - Read-to-Write and Write-to-Write ratios
 
-## Supported Benchmarks
+## Supported Benchmarks:
 
 - 099.go
 - 124.m88ksim
@@ -29,32 +31,33 @@ The benchmarks are too large to be contained within the repository. Please follo
 ```
 https://drive.google.com/drive/folders/14rs7B_XDDwIt9W74svfScrMwoWW0kEBe?usp=sharing
 ```
-Once downloaded make sure the are contained in a folder named "traces" within "Cache/"
+Once downloaded make sure the are contained in a folder named "traces" within the project's root directory
 
-## Building
+## Building:
 
-### Prerequisites
+### Prerequisites:
+
 - GCC compiler
 - Make build system
 - Bash shell (for running tests)
 
-### Makefile
+### Makefile:
 
 To build the makefile:
-
 - Navigate to "src/"
 - Run
 ```bash
 make all 
 ``` 
 
-## Usage
+## Usage:
 
 ```bash
 ./cache_exec <cache_type> <line_size> <cache_layers> <L1_size> <L2_size> <L3_size> <print_style>
 ```
 
-### Parameters
+### Parameters:
+
 - `cache_type`: Cache type to simulate (I=Instruction, D=Data, U=Unified)
 - `line_size`: Size of cache line in words (1 word = 4 bytes)
 - `cache_layers`: Number of cache layers (1-3)
@@ -63,7 +66,8 @@ make all
 - `L3_size`: L3 cache size in KB (0 if unused)
 - `print_style`: Output format (1=Basic, 2=Detailed)
 
-### Example
+### Example:
+
 ```bash
 # Single layer 8KB L1 cache with 4-word lines
 ./cache_exec U 4 1 8 0 0 1 < ../traces/126.gcc
@@ -72,7 +76,7 @@ make all
 ./cache_exec D 8 3 16 64 256 2 < ../traces/132.ijpeg
 ```
 
-## Testing
+## Testing:
 
 Run the full test suite:
 ```bash
@@ -83,7 +87,7 @@ Run the full test suite:
 
 This will execute various cache configurations using the provided trace files.
 
-## Architecture
+## Architecture:
 
 The simulator implements a direct-mapped cache with the following features:
 - Write-back policy for handling writes
@@ -91,7 +95,7 @@ The simulator implements a direct-mapped cache with the following features:
 - Configurable tag, index, and offset bits based on cache parameters
 - Support for both unified and split I/D caches
 
-## Performance
+## Performance:
 
 Memory access times are modeled as follows:
 - L1 Cache: 1 cycle
@@ -101,6 +105,6 @@ Memory access times are modeled as follows:
 
 AMAT (Average Memory Access Time) is calculated based on hit rates at each level.
 
-## Author
+## Author:
 
 Tyler Neal
