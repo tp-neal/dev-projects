@@ -1,24 +1,3 @@
-/*
-===========================================================================
- PROJECT: Direct-Mapped Write-Back Cache [Trace Driven Simulation]
-===========================================================================
- NAME : Tyler Neal
- USER ID : tpneal
- DATE: 01/09/2025
- FILE NAME : cache.h
- DESCRIPTION:
-    This header file declares the structures necessary to model a direct-mapped
-    write-back cache. It provides declarations for cache blocks, sets, and the
-    entire cache structure.
-
- CONTENTS:
-    - Cache Definitions for Memory Request Times and Address Calculation
-    - Cache Structures and Enums
-    - Request Structures and Enums
-    - Cache Function Declarations
-
-===========================================================================
-*/
 
 #ifndef CACHE_H
 #define CACHE_H
@@ -50,165 +29,213 @@
 /================================================================== */
 
 /***************| Cache |***************/
+typedef struct Line {
+  bool dirty; // represents the dirty bit
+  char tag[INSTRUCTION_SIZE];
+} Line;
 
 typedef enum {
-  UNIFIED = 'U', // Both Data and Instruction
-  DATA = 'D', // Data
-  INSTRUCTION = 'I'  // Instruction
+	UNIFIED = 'U',     // Both Data and Instruction
+	DATA = 'D',        // Data
+	INSTRUCTION = 'I'  // Instruction
 } Cache_Type;
-
-typedef struct Line {
-  int dirty; // Represents the dirty bit
-  char tag[MAX_TAG_SIZE];
-} Line;
 
 typedef struct Cache {
   // Cache Details
-  int cache_size; // (bytes)
-  int line_size;  // (bytes)
-  int num_lines;  // (lines/block)
-  int layer;      // (e.g L1, L2, L3)
+  unsigned int layer;      // (e.g L1, L2, L3)
+  size_t cache_size; // (bytes)
+  size_t line_size;  // (bytes)
+  size_t num_lines;  // (lines/block)
   Line *lines;
 
   // Feild Sizes
-  int tag_size;
-  int index_size;
-  int offset_size;
+  unsigned int tag_size;
+  unsigned int index_size;
+  unsigned int offset_size;
 
   // Recorded Metrics
-  int requests;
-  int hits;
-  int misses;
-  int read_to_write;
-  int write_to_write;
+  size_t requests;
+  size_t hits;
+  size_t misses;
+  size_t read_to_write;
+  size_t write_to_write;
 } Cache;
 
 /***************| Request |***************/
+typedef struct Address { 
+  unsigned int hex;
+  char binary[33]; // temp size
+
+  char tag[INSTRUCTION_SIZE+1]; // +1 for null terminator
+  unsigned int tag_size;
+
+  char index[INSTRUCTION_SIZE+1];
+  unsigned int index_size;
+
+  char offset[INSTRUCTION_SIZE+1];
+  unsigned int offset_size;
+
+} Address;
 
 typedef struct Request {
   Cache_Type ref_type;
   char access_type;
-
-  unsigned int address; // Hex address formatted as int
-  char tag[MAX_TAG_SIZE+1]; // +1 for null terminator
-  char index[MAX_INDEX_SIZE+1];
-  char offset[MAX_OFFSET_SIZE+1];
+  Address address;
 } Request;
 
 /* ===================================================================
-                    Cache Function Declarations
+                      Function Declarations
 =================================================================== */
 
 /***************| Cache |***************/
 /**
- * @brief Allocates memory for a cache and returns a pointer to it
+ * @brief Allocates memory for a cache structure
  * 
- * @param cache_size - size of cache in bytes
- * @param line_size - size of each cache line in bytes
- * @param layer - layer the cache represents (e.g. L1, L2, L3)
- * @return Cache* - pointer to allocated cache
+ * @param cache Double pointer to cache instance to allocate
+ * @param layer Cache layer number (1-3)
+ * @param cache_size Total size of cache in bytes
+ * @param line_size Size of each cache line in bytes
+ * @return cache_status_t Status structure with error code and cache metadata
  */
-cache_error_info_t allocateCache(Cache** cache, int cache_size, int line_size, int layer);
+cache_status_t allocateCache(Cache** cache, unsigned int layer, size_t cache_size, size_t line_size);
 
 /**
  * @brief Deallocates memory for a cache given its pointer
  * 
- * @param cache - pointer to cache to be destroyed
+ * @param cache Pointer to cache to be destroyed
  */
 void destroyCache(Cache* cache);
 
 /**
- * @brief Cacluates and stores the address field sizes for a given cache
+ * @brief Initializes cache structure and calculates address field sizes
  * 
- * @param layer - layer the cache represents (e.g. L1, L2, L3)
- * @param cache_size - size of cache in bytes
- * @param line_size - size of each cache line in bytes
- * @return Cache* - pointer to initialized cache
+ * @param cache Double pointer to cache instance to initialize
+ * @param layer Cache layer number (1-3)
+ * @param cache_size Total size of cache in bytes
+ * @param line_size Size of each cache line in bytes
+ * @return cache_status_t Status structure with error code and cache metadata
  */
-cache_error_info_t setupCache(Cache** cache, int layer, int cache_size, int line_size);
+cache_status_t setupCache(Cache** cache, unsigned int layer, size_t cache_size, size_t line_size);
 
 /**
- * @brief Prints cache statistics, including cache configuration, as well as
- *        performance metrics like hit rate, miss rate, and request ratios.
+ * @brief Prints cache statistics and configuration details
  * 
- * @param cache - pointer to cache who's statistics will be printed
- * @param style - style of stat print (1 for simple view : 2 for more detailed stats)
+ * @param cache Pointer to cache instance to display stats for
+ * @param style Output style (1 = compact, 2 = verbose)
+ * @return cache_status_t Status structure with error code
  */
-cache_error_info_t printCacheStats(Cache* cache, int style);
+cache_status_t printCacheStats(Cache* cache, unsigned int style);
 
 
 /***************| Request |***************/
 /**
- * @brief Allocates memory for a memory request
+ * @brief Allocates memory for a memory request object
  * 
- * @return Request* - pointer to allocated request
+ * @param request Double pointer to request instance to allocate
+ * @return request_status_t Status structure with error code
  */
-request_error_info_t allocateRequest(Request** request);
+request_status_t allocateRequest(Request** request);
 
 /**
  * @brief Deallocates memory for a request given its pointer
  * 
- * @param request - pointer to request to be free'd
+ * @param request Pointer to request to be free'd
  */
 void destroyRequest(Request* request);
 
 /**
- * @brief Formats the tag index and offset of a request given the cache it will query
+ * @brief Parses trace input and formats memory request for cache processing
  * 
- * @param request - pointer to request to be formated
- * @param cache - pointer to cache layer the request will be performed on
- * @param buffer - string buffer containing memory request (format: @<I/D><R/W><hex-address>)
+ * @param request Pointer to request object to populate
+ * @param cache Pointer to target cache for address field calculations
+ * @param buffer Input string containing trace data (format: @<I/D><R/W><hex-address>)
+ * @return request_status_t Status structure with error code
  */
-request_error_info_t formatRequest(Request* request, Cache* cache, const char* buffer);
+request_status_t formatRequest(Request* request, Cache* cache, const char* buffer);
 
 /**
- * @brief Takes a request and sends the read / write request to the supplied cache.
- *        Based on request type passes request to readData() or writeData()
+ * @brief Processes a memory request through the cache hierarchy
  * 
- * @param request - pointer to request to be processed
- * @param cache - pointer to cache layer the request will be performed on
- * @param data_found - flag that represents a hit made (true if data is found, false otherwise)
+ * @param request Pointer to request object containing memory operation details
+ * @param cache Pointer to target cache layer
+ * @param data_found Output flag indicating cache hit (true) or miss (false)
+ * @return request_status_t Status structure with error code
  */
-request_error_info_t processRequest(Request* request, Cache* cache, bool* data_found);
+request_status_t processRequest(Request* request, Cache* cache, bool* data_found);
 
 /**
  * @brief Reads data from a cache at the address specified in the request.
- *        (This is where hit / miss stats are counted)
+ *        (This is where hit/miss stats are counted)
  *        
  * 
- * @param cache - pointer to cache layer the request will be performed on
- * @param request - pointer to request to be processed
- * @param data_found - flag that represents a hit made (true if data is found : false otherwise)
+ * @param cache Pointer to cache layer the request will be performed on
+ * @param request Pointer to request to be processed
+ * @param data_found Output flag indicating cache hit (true) or miss (false)
  */
-request_error_info_t readData(Cache* cache, Request* request, bool* data_found);
+request_status_t readData(Cache* cache, Request* request, bool* data_found);
 
 /**
  * @brief Writes data from a cache at the address specified in the request
- *        (This is where hit / miss stats are counted)
+ *        (This is where hit/miss stats are counted)
  * 
- * @param cache - pointer to cache layer the request will be performed on 
- * @param request - pointer to request to be processed 
- * @param data_found - flag that represents a hit made (TRUE if data is found : FALSE if data wasnt found)
+ * @param cache Pointer to cache layer the request will be performed on 
+ * @param request Pointer to request to be processed 
+ * @param data_found Output flag indicating cache hit (true) or miss (false)
  */
-request_error_info_t writeData(Cache* cache, Request* request, bool* data_found);
+request_status_t writeData(Cache* cache, Request* request, bool* data_found);
 
 
-/***************| Helper |***************/
+/***************| Error Handling |***************/
 /**
- * @brief Converts an integer to binary
+ * @brief Handles parameter validation errors and displays diagnostic messages
  * 
- * @param num - number to be converted
- * @return char* - binary of number in string format
+ * @param error Parameter error status structure containing error details
+ * @return int Always returns EXIT_FAILURE to indicate program termination
  */
-char* itob(int num);
+int parameter_error_handler(parameter_status_t error);
 
 /**
- * @brief Converts binary to an integer
+ * @brief Handles cache errors and displays diagnostic messages
  * 
- * @param binary - binary value of a number
- * @return int - integer representation of binary
+ * @param error Cache error status structure containing error details
+ * @return int Always returns EXIT_FAILURE to indicate program termination
  */
-int btoi(const char* binary);
+int cache_error_handler(cache_status_t error);
+
+/**
+ * @brief Handles request errors and displays diagnostic messages
+ * 
+ * @param error Request error status structure containing error details
+ * @return int Always returns EXIT_FAILURE to indicate program termination
+ */
+int request_error_handler(request_status_t error);
+
+
+/***************| Additional Helpers |***************/
+/**
+ * @brief Converts 32-bit integer to binary string representation
+ * 
+ * @param binary Pointer to binary string
+ * @param hex Hex value of number to be converted
+ */
+void itob(char* binary, unsigned int hex);
+
+/**
+ * @brief Converts binary string to integer value
+ * 
+ * @param binary Null-terminated binary string to convert
+ * @return int Decimal representation of binary input
+ */
+unsigned int btoi(const char* binary);
+
+/**
+ * @brief Checks if value is a power of two
+ * 
+ * @param n Value to check
+ * @return true 
+ * @return false 
+ */
+bool isPowerOfTwo(int n);
 
 
 #endif // CACHE_H

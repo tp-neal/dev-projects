@@ -1,9 +1,10 @@
+
 /*
 ===========================================================================
  PROJECT: Direct-Mapped Write-Back Cache [Trace Driven Simulation]
 ===========================================================================
  NAME: Tyler Neal
- DATE: 01/09/2025
+ DATE: 02/18/2025
  FILE NAME: main.c
  DESCRIPTION:
     This file contains the initialization logic for the various structures 
@@ -26,23 +27,33 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <stdint.h>
 #include "cache.h"
 #include "error.h"
 
+
 // Global Variables
-int cache_layers = 0;
+unsigned int cache_layers;
  
 // ========================================================================
 //                               Main
 // ========================================================================
 
 /**
- * @brief Simulates a (1-3) layer direct-mapped write-back cache and prints statistics given inputed Trace files
- * 
- * @param argc - number of arguments
- * @param argv - array of arguments in char pointer format
- * @return int - 0 on success : >= 1 on failure
- */
+* @brief Main entry point for cache simulation program
+* 
+* @param argc Number of command-line arguments (expected 8)
+* @param argv Array of command-line arguments:
+*             [0] Executable name
+*             [1] Cache type (U/I/D)
+*             [2] Line size in words
+*             [3] Number of cache layers (1-3)
+*             [4] L1 size in KB
+*             [5] L2 size in KB
+*             [6] L3 size in KB
+*             [7] Print style (1/2)
+* @return int EXIT_SUCCESS on success, EXIT_FAILURE on error
+*/
 int main(int argc, char* argv[]) {
 
     // ========== Set up Timing Elements ==========
@@ -52,84 +63,78 @@ int main(int argc, char* argv[]) {
 
 
     // ========== Verify Command-line Arguments ==========
-    parameter_error_info_t parameter_error = {
+    parameter_status_t parameter_status = {  // holds error info
         .error_code = PARAMETER_SUCCESS,
         .executable_name = argv[0]
     };
 
     // Check argument count
-    if (argc < 8) {
-        parameter_error.error_code = PARAMETER_INVALID_ARG_COUNT;
-        parameter_error.argument_count = argc;
-        return parameter_error_handler(parameter_error);
+    if (argc != 8) {
+        parameter_status.error_code = PARAMETER_INVALID_ARG_COUNT;
+        parameter_status.argument_count = argc;
+        return parameter_error_handler(parameter_status);
     }
 
-    // Parse command-line arguments
-    Cache_Type cache_type = (Cache_Type)*argv[1];
+    // Get type of cache reference to be tracked
+    Cache_Type cache_type = (Cache_Type) *argv[1]; // cast the character
     if (cache_type != UNIFIED && cache_type != INSTRUCTION && cache_type != DATA) {
-        parameter_error.error_code = PARAMETER_INVALID_CACHE_TYPE;
-        parameter_error.cache_type = cache_type;
-        return parameter_error_handler(parameter_error);
+        parameter_status.error_code = PARAMETER_INVALID_CACHE_TYPE;
+        parameter_status.cache.type = cache_type;
+        return parameter_error_handler(parameter_status);
     }
     
-    int line_size = (atoi(argv[2])*4);  // line size parameter is in unit of words. We mutliply by 4 as 1 word = 4 bytes
-    if (line_size < 4 || line_size > 64) {
-        parameter_error.error_code = PARAMETER_INVALID_LINE_SIZE;
-        parameter_error.line_size = line_size;
-        return parameter_error_handler(parameter_error);
+    // Get size of each line in all caches
+    size_t line_size = (atoi(argv[2]) * 4);  // line size parameter is in unit of words. We mutliply by 4 to get bytes
+    
+    // || line_size > 64 (took cond out temporarily)
+    if (line_size < 4) { // cannot physically be smaller than 4 bytes, or larger than 64 bytes in our example
+        parameter_status.error_code = PARAMETER_INVALID_LINE_SIZE;
+        parameter_status.cache.line_size = line_size;
+        return parameter_error_handler(parameter_status);
     }
 
+    // Get total number of cache layers
     cache_layers = atoi(argv[3]);
-    if (cache_layers < 1 || cache_layers > 3) {
-        parameter_error.error_code = PARAMETER_INVALID_CACHE_LAYER_COUNT;
-        parameter_error.cache_layers = cache_layers;
-        return parameter_error_handler(parameter_error);
+    if (cache_layers < 1 || cache_layers > 3) { // we only support a 1-3 layer cache system here
+        parameter_status.error_code = PARAMETER_INVALID_CACHE_LAYER_COUNT;
+        parameter_status.cache.num_layers = cache_layers;
+        return parameter_error_handler(parameter_status);
     }
     
-    int L1_size = (atoi(argv[4])*1024); // cache sizes are in unit of KB. We multiply by 1024 to convert to bytes
-    if (L1_size < 0 || L1_size % line_size != 0) {
-        parameter_error.error_code = PARAMETER_INVALID_CACHE_SIZE;
-        parameter_error.cache_size = L1_size;
-        parameter_error.layer = 1;
-        return parameter_error_handler(parameter_error);
-    }
-    
-    int L2_size = (atoi(argv[5])*1024);
-    if (L2_size < 0 || L2_size % line_size != 0) {
-        parameter_error.error_code = PARAMETER_INVALID_CACHE_SIZE;
-        parameter_error.cache_size = L2_size;
-        parameter_error.layer = 2;
-        return parameter_error_handler(parameter_error);
-    }
-    
-    int L3_size = (atoi(argv[6])*1024); 
-    if (L3_size < 0 || L3_size % line_size != 0) {
-        parameter_error.error_code = PARAMETER_INVALID_CACHE_SIZE;
-        parameter_error.cache_size = L3_size;
-        parameter_error.layer = 3;
-        return parameter_error_handler(parameter_error);
-    }
+    // Get cache sizes (0 indicates nonexistent cache layer)
+    size_t L1_size_B = (atoi(argv[4]) * 1024); // cache sizes are in unit of KB. We multiply by 1024 to convert to bytes
+    size_t L2_size_B = (atoi(argv[5]) * 1024);
+    size_t L3_size_B = (atoi(argv[6]) * 1024); 
+    size_t cache_sizes[] = {L1_size_B, L2_size_B, L3_size_B};
 
-    int print_style = atoi(argv[7]);    // style of 1 prints total request and miss rate, while style 2 prints more detailed view
-    if (print_style != 1 && print_style != 2) {
-        parameter_error.error_code = PARAMETER_INVALID_PRINT_STYLE;
-        parameter_error.print_style = print_style;
-        return parameter_error_handler(parameter_error);
-    }
+    // Validate integrity of computed cache sizes
+    for (unsigned int i = 0; i < cache_layers; i++) {
 
-
-    // Declare cache layers
-    Cache* cache[3] = {NULL, NULL, NULL}; // each index represents a cache layer where layer number = index + 1
-    int layer_sizes[3] = {L1_size, L2_size, L3_size};
-    cache_error_info_t cache_setup_error;
-
-    // Allocate and populate cache layers
-    for (int i = 0; i < cache_layers; i++) {
-        cache_setup_error = setupCache(&cache[i], i+1, layer_sizes[i], line_size);
-        if (cache_setup_error.error_code != CACHE_SUCCESS) {
-            cache_error_handler(cache_setup_error);
-            return cache_setup_error.error_code;
+        // Make sure cache is valid size and lines are properly addressable
+        if (cache_sizes[i] % line_size != 0) {
+            parameter_status.error_code = PARAMETER_INVALID_CACHE_SIZE;
+            parameter_status.cache.size = cache_sizes[i];
+            parameter_status.cache.layer = (i+1); // increment since we are 0-indexed
+            return parameter_error_handler(parameter_status);
         }
+    }
+
+    // Get print style
+    unsigned int print_style = atoi(argv[7]); // style of 1 prints total request and miss rate, while style 2 prints more detailed view
+    if (print_style != 1 && print_style != 2) {
+        parameter_status.error_code = PARAMETER_INVALID_PRINT_STYLE;
+        parameter_status.print_style = print_style;
+        return parameter_error_handler(parameter_status);
+    }
+
+
+    // Allocate and initialize cache layers
+    Cache* cache[3]; // each index represents a cache layer where layer number = index + 1
+    size_t layer_sizes[3] = {L1_size_B, L2_size_B, L3_size_B};
+    cache_status_t cache_setup_status;
+    for (unsigned int i = 0; i < cache_layers; i++) {
+        cache_setup_status = setupCache(&cache[i], (i+1), layer_sizes[i], line_size);
+        CACHE_ERR_CHECK(cache_setup_status);
     }
 
 
@@ -141,56 +146,52 @@ int main(int argc, char* argv[]) {
 
     // Initialize request
     Request* request;
-    request_error_info_t request_error = allocateRequest(&request);
-    if (request_error.error_code != REQUEST_SUCCESS) {
-        request_error_handler(request_error);
-        return request_error.error_code;
-    }
+    request_status_t request_status = allocateRequest(&request);
+    REQUEST_ERR_CHECK(request_status);
 
     // Process each trace in the input file
     while ((current_char = getchar()) != EOF) {
-        if (current_char == '@') {
-            fgets(buffer, sizeof(buffer), stdin); // reads trace format: @<I/D><R/W><hex-address>
+        if (current_char != '@') continue; // skip until trace found
 
-            // Try each cache layer until data is found
-            for (int i = 0; i < cache_layers; i++) {
-                request_error = formatRequest(request, cache[i], buffer);
-                if (request_error.error_code != REQUEST_SUCCESS) {
-                    request_error_handler(request_error);
-                    return request_error.error_code;
-                }
+        // Trace found, read in format: <I/D><R/W><hex-address>
+        fgets(buffer, sizeof(buffer), stdin);
 
-                // Process request if cache type matches or if cache is unified
-                if (request->ref_type == cache_type || cache_type == UNIFIED) {
-                    cache[i]->requests++;
-                    request_error = processRequest(request, cache[i], &data_found);
-                    if (request_error.error_code != REQUEST_SUCCESS) {
-                        request_error_handler(request_error);
-                        return request_error.error_code;
-                    }
-                    if (data_found) break; // exit loop on cache hit
-                }
+        // Try each cache layer in order until data is found
+        for (unsigned int i = 0; i < cache_layers; i++) {
+
+            // Format the request information for cache layer
+            request_status = formatRequest(request, cache[i], buffer);
+            REQUEST_ERR_CHECK(request_status);
+
+            // If request type is not that of cache, skip request
+            if (request->ref_type != cache_type && cache_type != UNIFIED) {
+                break;
             }
-            data_found = false;
+
+            // Process request in given cache layer
+            cache[i]->requests++;
+            request_status = processRequest(request, cache[i], &data_found);
+            REQUEST_ERR_CHECK(request_status);
+            if (data_found) break; // exit loop on cache hit
         }
+
+        // Reset flag
+        data_found = false;
     }
 
 
     // ========== Calculate & Prints Cache Statistics ==========
     // Calculate miss rates
     float miss_rates[3];
-    for (int i = 0; i < cache_layers; i++) {
+    for (unsigned int i = 0; i < cache_layers; i++) {
         miss_rates[i] = ((float)cache[i]->misses / (float)cache[i]->requests)   ;
     }
 
     // Print cache statistics
-    cache_error_info_t print_error;
-    for (int i = 0; i < cache_layers; i++) {
-        print_error = printCacheStats(cache[i], print_style);
-        if (print_error.error_code != CACHE_SUCCESS) {
-            cache_error_handler(print_error);
-            return print_error.error_code;
-        }
+    cache_status_t print_status;
+    for (unsigned int i = 0; i < cache_layers; i++) {
+        print_status = printCacheStats(cache[i], print_style);
+        CACHE_ERR_CHECK(print_status);
     }
 
     // Calculate and display average memory access time for each layer
@@ -206,7 +207,7 @@ int main(int argc, char* argv[]) {
 
     // Clean up memory
     destroyRequest(request);
-    for (int i = 0; i < cache_layers; i++) {
+    for (unsigned int i = 0; i < cache_layers; i++) {
         destroyCache(cache[i]);
     }
 
@@ -225,69 +226,35 @@ int main(int argc, char* argv[]) {
 //========================================================================
 
 /**
- * @brief Allocates memory for a cache and returns a pointer to it
+ * @brief Allocates memory for a cache structure
  * 
- * @param cache_size - size of cache in bytes
- * @param line_size - size of each cache line in bytes
- * @param layer - layer the cache represents (e.g. L1, L2, L3)
- * @return Cache* - pointer to allocated cache
+ * @param cache Double pointer to cache instance to allocate
+ * @param layer Cache layer number (1-3)
+ * @param cache_size Total size of cache in bytes
+ * @param line_size Size of each cache line in bytes
+ * @return cache_status_t Status structure with error code and cache metadata
  */
-cache_error_info_t allocateCache(Cache** cache, int cache_size, int line_size, int layer) {
-    cache_error_info_t error_info = {
+cache_status_t allocateCache(Cache** cache, unsigned int layer, size_t cache_size, size_t line_size) {
+    cache_status_t cache_status = {
         .error_code = CACHE_SUCCESS,
-        .layer = layer,
-        .cache_size = cache_size,
-        .line_size = line_size
+        .cache.layer = layer,
+        .cache.size = cache_size,
+        .cache.line_size = line_size
     };
-
-    // Check for null pointer
-    if (cache == NULL) {
-        error_info.error_code = CACHE_IS_NULL;
-        return error_info;
-    }
 
     // Allocate space for cache
     *cache = (Cache*)malloc(sizeof(Cache));
     if (*cache == NULL) {
-        error_info.error_code = CACHE_ALLOCATION_FAILED;
-        return error_info;
+        cache_status.error_code = CACHE_ALLOCATION_FAILED;
     }
 
-    // Initialize cache struct values
-    (*cache)->cache_size = cache_size;
-    (*cache)->line_size = line_size;
-    (*cache)->num_lines = (cache_size / line_size);
-    (*cache)->layer = layer;
-    (*cache)->requests = 0;
-    (*cache)->hits = 0;
-    (*cache)->misses = 0;
-    (*cache)->read_to_write = 0;
-    (*cache)->write_to_write = 0;
-
-    // Memory allocation for cache lines
-    (*cache)->lines = (Line*)malloc((*cache)->num_lines * sizeof(Line));
-    if ((*cache)->lines == NULL) {
-        error_info.error_code = CACHE_LINE_ALLOCATION_FAILED;
-        return error_info;
-    }
-    for (int i = 0; i < (*cache)->num_lines; i++) {
-        // Setting initial values for each cache line
-        (*cache)->lines[i].dirty = 0;        // Marks line as initially clean (not modified)
-        (*cache)->lines[i].tag[0] = 'x';     // Initial tag set to 'x' to represent uninitialized
-    }
-
-    if (DEBUG) {
-        printf("Cache Created\n..............\nSize: %d bytes\nLine Count: %d\nLine Size: %d bytes\n", 
-              (*cache)->cache_size, (*cache)->num_lines, (*cache)->line_size);
-    }
-
-    return error_info;
+    return cache_status;
 }
 
 /**
  * @brief Deallocates memory for a cache given its pointer
  * 
- * @param cache - pointer to cache to be destroyed
+ * @param cache Pointer to cache to be destroyed
  */
 void destroyCache(Cache* cache) {
     // Check for null pointer
@@ -298,82 +265,127 @@ void destroyCache(Cache* cache) {
         free(cache);
     }
 
+    // Debug Print
     if (DEBUG) {
         printf("Cache successfully deleted\n");
     }
 }
 
 /**
- * @brief Cacluates and stores the address field sizes for a given cache
+ * @brief Initializes cache structure and calculates address field sizes
  * 
- * @param layer - layer the cache represents (e.g. L1, L2, L3)
- * @param cache_size - size of cache in bytes
- * @param line_size - size of each cache line in bytes
- * @return Cache* - pointer to initialized cache
+ * @param cache Double pointer to cache instance to initialize
+ * @param layer Cache layer number (1-3)
+ * @param cache_size Total size of cache in bytes
+ * @param line_size Size of each cache line in bytes
+ * @return cache_status_t Status structure with error code and cache metadata
  */
-cache_error_info_t setupCache(Cache** cache, int layer, int cache_size, int line_size) {
-    cache_error_info_t error_info;
-    error_info = allocateCache(cache, cache_size, line_size, layer);
-    if (error_info.error_code != CACHE_SUCCESS) {
-        return error_info;
+cache_status_t setupCache(Cache** cache, unsigned int layer, size_t cache_size, size_t line_size) {
+
+    // Allocate space for cache on the heap
+    cache_status_t cache_status = allocateCache(cache, layer, cache_size, line_size);
+    if (cache_status.error_code != CACHE_SUCCESS) {
+        return cache_status;
+    }
+
+
+    // Initialize cache struct values
+    (*cache)->layer = layer;
+    (*cache)->cache_size = cache_size;
+    (*cache)->line_size = line_size;
+    (*cache)->num_lines = (cache_size / line_size);
+    (*cache)->requests = 0;
+    (*cache)->hits = 0;
+    (*cache)->misses = 0;
+    (*cache)->read_to_write = 0;
+    (*cache)->write_to_write = 0;
+
+    // Verify number of lines is a power of two
+    if (!isPowerOfTwo((*cache)->num_lines)) {
+        cache_status.error_code = CACHE_SIZE_NOT_POWER_OF_TWO;
+        cache_status.cache.num_lines = (*cache)->num_lines;
+        return cache_status;
+    }
+
+    // Memory allocation for cache lines
+    (*cache)->lines = (Line*)malloc((*cache)->num_lines * sizeof(Line));
+    if ((*cache)->lines == NULL) {
+        cache_status.error_code = CACHE_LINE_ALLOCATION_FAILED;
+        return cache_status;
+    }
+
+    // Default each line's attributes
+    for (size_t i = 0; i < (*cache)->num_lines; i++) {
+        (*cache)->lines[i].dirty = false; // marks line as initially clean (not modified)
+        (*cache)->lines[i].tag[0] = 'x';  // initial tag set to 'x' to represent uninitialized
     }
 
     // Calculate Address Field Sizes
-    (*cache)->offset_size = (int)ceil(log2(line_size)); // we round up the value to ensure there are enough bits to address all lines
-    (*cache)->index_size = (int)ceil(log2(cache_size / line_size));
-    (*cache)->tag_size = INSTRUCTION_SIZE - (*cache)->index_size - (*cache)->offset_size;
+    (*cache)->offset_size = (size_t)(log2(line_size));
+    (*cache)->index_size = (size_t)(log2(cache_size / line_size));
+    (*cache)->tag_size = (size_t)(INSTRUCTION_SIZE - (*cache)->index_size - (*cache)->offset_size);
 
-    // Debug Printing
+    // Debug Print
     if (DEBUG) {
-        printf("\nCache Size: %d\nLine Size: %d\ncache->tag_size: %d\ncache->index_size: %d\ncache->offset_size: %d\n\n",
-               cache_size, line_size, (*cache)->tag_size, (*cache)->index_size, (*cache)->offset_size);
+        printf( "\nCache Created:\n"
+                  "---------------\n"
+                  "Layer: %u\n"
+                  "Size (bytes): %zu\n"
+                  "Line Size (bytes): %zu\n"
+                  "Number of Lines: %zu\n"
+                  "Tag Size: %d\n"
+                  "Index Size: %d\n"
+                  "Offset Size: %d\n",
+                  layer, cache_size, line_size, (*cache)->num_lines, 
+                  (*cache)->tag_size, (*cache)->index_size, (*cache)->offset_size);
     }
 
-    return error_info;
+    return cache_status;
 }
 
 /**
- * @brief Prints cache statistics, including cache configuration, as well as
- *        performance metrics like hit rate, miss rate, and request ratios.
+ * @brief Prints cache statistics and configuration details
  * 
- * @param cache - pointer to cache who's statistics will be printed
- * @param style - style of stat print (1 for simple view : 2 for more detailed stats)
+ * @param cache Pointer to cache instance to display stats for
+ * @param style Output style (1 = compact, 2 = verbose)
+ * @return cache_status_t Status structure with error code
  */
-cache_error_info_t printCacheStats(Cache* cache, int style) {
-    cache_error_info_t error_info = {
+cache_status_t printCacheStats(Cache* cache, unsigned int style) {
+    cache_status_t cache_status = {
         .error_code = CACHE_SUCCESS
     };
     
     // Check for null pointer
     if (cache == NULL) {
-        error_info.error_code = CACHE_IS_NULL;
-        return error_info;
+        cache_status.error_code = CACHE_IS_NULL;
+        return cache_status;
     }
 
     if (style == 1) {
         // Output for Part 1
-        printf("Total Requests: %d\n", cache->requests);
+        printf("Total Requests: %zu\n", cache->requests);
         printf("     Miss Rate: %.2f%%\n", ((float)cache->misses / (float)cache->requests) * 100);
         printf("------------------------------------------------------------\n");
 
     } else if (style == 2) {
         // Output for Part 2
-        printf("Cache Layer: L%d\n", cache->layer);
+        printf("\nCache Layer: %u\n", cache->layer);
         printf("----------------\n");
         printf("Configuration:\n");
-        printf("    Size: %d bytes\n", cache->cache_size);
-        printf("    Line Size: %d bytes\n", cache->line_size);
-        printf("    Line Count: %d\n", cache->num_lines);
+        printf("    Size: %zu bytes\n", cache->cache_size);
+        printf("    Line Size: %zu bytes\n", cache->line_size);
+        printf("    Line Count: %zu\n", cache->num_lines);
         printf("Performance Metrics:\n");
-        printf("    Total Requests: %d\n", cache->requests);
-        printf("    Hits: %d\n", cache->hits);
-        printf("    Misses: %d\n", cache->misses);
+        printf("    Total Requests: %zu\n", cache->requests);
+        printf("    Hits: %zu\n", cache->hits);
+        printf("    Misses: %zu\n", cache->misses);
         printf("    Hit Rate: %.2f%%\n", ((float)cache->hits / (float)cache->requests) * 100);
         printf("    Miss Rate: %.2f%%\n", ((float)cache->misses / (float)cache->requests) * 100);
-        printf("    Read to Write Ratio: %d\n", cache->read_to_write);
-        printf("    Write to Write Ratio: %d\n", cache->write_to_write);
+        printf("    Read to Write Ratio: %zu\n", cache->read_to_write);
+        printf("    Write to Write Ratio: %zu\n", cache->write_to_write);
     }
-    return error_info;
+
+    return cache_status;
 }
 
 // ========================================================================
@@ -381,324 +393,424 @@ cache_error_info_t printCacheStats(Cache* cache, int style) {
 // ========================================================================
 
 /**
- * @brief Allocates memory for a memory request
+ * @brief Allocates memory for a memory request object
  * 
- * @return Request* - pointer to allocated request
+ * @param request Double pointer to request instance to allocate
+ * @return request_status_t Status structure with error code
  */
-request_error_info_t allocateRequest(Request** request) {
-    request_error_info_t request_error = {
+request_status_t allocateRequest(Request** request) {
+    request_status_t request_status = {
         .error_code = REQUEST_SUCCESS
     };
-
-    // Check for null pointer
-    if (request == NULL) {
-        request_error.error_code = REQUEST_ON_NULL_CACHE;
-        return request_error;
-    }
 
     // Allocate memory for Request
     *request = (Request*)malloc(sizeof(Request));
     if (*request == NULL) {
-        request_error.error_code = REQUEST_ALLOCATION_FAILED;
-        return request_error;
+        request_status.error_code = REQUEST_ALLOCATION_FAILED;
     }
 
-    return request_error;
+    return request_status;
 }
 
 /**
  * @brief Deallocates memory for a request given its pointer
  * 
- * @param request - pointer to request to be free'd
+ * @param request Pointer to request to be free'd
  */
 void destroyRequest(Request* request) {
     // Check for null pointer
     if (request != NULL) {
         free(request);
     }
+
+    // Debug Print
+    if (DEBUG) {
+        printf("Request successfully deleted\n");
+    }
 }
 
 /**
- * @brief Formats the tag index and offset of a request given the cache it will query
+ * @brief Parses trace input and formats memory request for cache processing
  * 
- * @param request - pointer to request to be formated
- * @param cache - pointer to cache layer the request will be performed on
- * @param buffer - string buffer containing memory request (format: @<I/D><R/W><hex-address>)
+ * @param request Pointer to request object to populate
+ * @param cache Pointer to target cache for address field calculations
+ * @param buffer Input string containing trace data (format: @<I/D><R/W><hex-address>)
+ * @return request_status_t Status structure with error code
  */
-request_error_info_t formatRequest(Request* request, Cache* cache, const char* buffer) {
-    request_error_info_t request_error = {
+request_status_t formatRequest(Request* request, Cache* cache, const char* buffer) {
+    request_status_t request_status = {
         .error_code = REQUEST_SUCCESS
     };
 
+    // Check for null request
+    if (request == NULL) {
+        request_status.error_code = REQUEST_IS_NULL;
+        return request_status;
+    }
+
+    // Check for null cache
+    if (cache == NULL) {
+        request_status.error_code = REQUEST_ON_NULL_CACHE;
+        return request_status;
+    }
+
+    // Assign address field sizes based on cache
+    request->address.tag_size = cache->tag_size;
+    request->address.index_size = cache->index_size;
+    request->address.offset_size = cache->offset_size;
+
+    // Buffer format: <I/D><R/W><hex-address>
     // Assign reference type based on trace
     if (buffer[0] == 'I') request->ref_type = INSTRUCTION;
     else if (buffer[0] == 'D') request->ref_type = DATA;
     else {
-        request_error.error_code = REQUEST_INVALID_REFERENCE_TYPE;
-        request_error.ref_type = buffer[0];
-        return request_error;
+        request_status.error_code = REQUEST_INVALID_REFERENCE_TYPE;
+        request_status.ref_type = buffer[0];
+        return request_status;
     }
 
     // Assign access type based on trace
     if (buffer[1] == 'R') request->access_type = 'R';
     else if (buffer[1] == 'W') request->access_type = 'W';
     else {
-        request_error.error_code = REQUEST_INVALID_ACCESS_TYPE;
-        request_error.access_type = buffer[1];
-        return request_error;
+        request_status.error_code = REQUEST_INVALID_ACCESS_TYPE;
+        request_status.access_type = buffer[1];
+        return request_status;
     }
 
-    // Fill in hex address
-    sscanf(buffer + 2, "%x", &request->address);
-
-    // Convert address to binary representation (placeholder function itob)
-    char request_address_binary[33];
-    char* binary_string = itob(request->address);
-    if (binary_string == NULL) {
-        request_error.error_code = REQUEST_BINARY_CONVERSION_FAILED;
-        request_error.address = request->address;
-        return request_error;
+    // Format hex address and ensure it's proper
+    if (sscanf(buffer + 2, "%x", &request->address.hex) != 1) {
+        request_status.error_code = REQUEST_INVALID_REFERENCE_TYPE;
+        return request_status;
     }
-    strcpy(request_address_binary, binary_string);
-    free(binary_string);
 
+    // Convert address to binary representation
+    itob(request->address.binary, request->address.hex);
+    
+    // Ensure tag buffer has enough space
+    if (request->address.tag_size >= INSTRUCTION_SIZE) {
+        request_status.error_code = REQUEST_INVALID_REFERENCE_TYPE;
+        return request_status;
+    }
+    
     // Retrieve and copy tag, index, and offset
-    strncpy(request->tag, request_address_binary, cache->tag_size);
-    request->tag[cache->tag_size] = '\0';
-    strncpy(request->index, request_address_binary + cache->tag_size, cache->index_size);
-    request->index[cache->index_size] = '\0';
-    strncpy(request->offset, request_address_binary + cache->tag_size + cache->index_size, cache->offset_size);
-    request->offset[cache->offset_size] = '\0';
+    strncpy(request->address.tag, 
+            request->address.binary, // start at index 0
+            request->address.tag_size
+    );
+    request->address.tag[request->address.tag_size] = '\0'; // end with null term
 
-    return request_error;
+    strncpy(request->address.index, 
+            request->address.binary + request->address.tag_size, // skip tag
+            request->address.index_size
+    );
+    request->address.index[request->address.index_size] = '\0'; // end with null term
+
+    strncpy(request->address.offset, 
+            request->address.binary + request->address.tag_size + request->address.index_size, // skip tag + index
+            request->address.offset_size
+    );
+    request->address.offset[request->address.offset_size] = '\0'; // end with null term
+
+    // Debug Print
+    if (DEBUG) {
+        printf( "\nRequest Formatted:\n"
+                  "-------------------\n"
+                  "Reference Type: %c\n"
+                  "Access Type: %c\n"
+                  "Cache Layer: %u\n"
+                  "Hex Address: %x\n"
+                  "Binary Address: %s\n"
+                  "Tag Bits: %s\n"
+                  "Tag Dec: %u\n"
+                  "Index Bits: %s\n"
+                  "Index Dec: %u\n"
+                  "Offset Bits: %s\n"
+                  "Offset Dec: %u\n",
+                  request->ref_type, request->access_type,
+                  cache->layer, request->address.hex, request->address.binary,
+                  request->address.tag, btoi(request->address.tag),
+                  request->address.index, btoi(request->address.index),
+                  request->address.offset, btoi(request->address.offset));
+    }
+
+    return request_status;
 }
 
 /**
- * @brief Takes a request and sends the read / write request to the supplied cache.
- *        Based on request type passes request to readData() or writeData()
+ * @brief Processes a memory request through the cache hierarchy
  * 
- * @param request - pointer to request to be processed
- * @param cache - pointer to cache layer the request will be performed on
- * @param data_found - flag that represents a hit made (true if data is found, false otherwise)
+ * @param request Pointer to request object containing memory operation details
+ * @param cache Pointer to target cache layer
+ * @param data_found Output flag indicating cache hit (true) or miss (false)
+ * @return request_status_t Status structure with error code
  */
-request_error_info_t processRequest(Request* request, Cache* cache, bool* data_found) {
-    request_error_info_t request_error = {
+request_status_t processRequest(Request* request, Cache* cache, bool* data_found) {
+    request_status_t request_status = {
         .error_code = REQUEST_SUCCESS
     };
 
     // Check for null pointer
     if (cache == NULL) {
-        request_error.error_code = REQUEST_ON_NULL_CACHE;
-        return request_error;
+        request_status.error_code = REQUEST_ON_NULL_CACHE;
+        return request_status;
     } else if (request == NULL) {
-        request_error.error_code = REQUEST_IS_NULL;
-        return request_error;
+        request_status.error_code = REQUEST_IS_NULL;
+        return request_status;
     }
 
     // Process request based on access type
-    request_error_info_t mem_access_info = {
-        .error_code = REQUEST_SUCCESS
-    };
     if (request->access_type == 'R') {
-        mem_access_info = readData(cache, request, data_found);
-        if (mem_access_info.error_code != REQUEST_SUCCESS) {
-            request_error.error_code = mem_access_info.error_code;
-            return request_error;
-        }
+        request_status = readData(cache, request, data_found);
     } else if (request->access_type == 'W') {
-        mem_access_info = writeData(cache, request, data_found);
-        if (mem_access_info.error_code != REQUEST_SUCCESS) {
-            request_error.error_code = mem_access_info.error_code;
-            return request_error;
-        }
+        request_status = writeData(cache, request, data_found);
     } else {
-        request_error.error_code = REQUEST_INVALID_ACCESS_TYPE;
-        request_error.access_type = request->access_type;
-        return request_error;
+        request_status.error_code = REQUEST_INVALID_ACCESS_TYPE;
+        request_status.access_type = request->access_type;
     }
 
-    return request_error;
+    return request_status;
 }
 
 /**
  * @brief Reads data from a cache at the address specified in the request.
- *        (This is where hit / miss stats are counted)
+ *        (This is where hit/miss stats are counted)
  *        
  * 
- * @param cache - pointer to cache layer the request will be performed on
- * @param request - pointer to request to be processed
- * @param data_found - flag that represents a hit made (true if data is found : false otherwise)
+ * @param cache Pointer to cache layer the request will be performed on
+ * @param request Pointer to request to be processed
+ * @param data_found Output flag indicating cache hit (true) or miss (false)
  */
-request_error_info_t readData(Cache* cache, Request* request, bool* data_found) {
-    request_error_info_t request_error = {
+request_status_t readData(Cache* cache, Request* request, bool* data_found) {
+    request_status_t request_status = {
         .error_code = REQUEST_SUCCESS
     };
 
     // Convert index to integer
-    int index = btoi(request->index);
+    size_t index = btoi(request->address.index);
 
     // Check if index is within bounds
-    if (index >= 0 && index <= cache->num_lines) {
-        Line* line = &cache->lines[index];
+    if (index >= cache->num_lines) {
+        request_status.error_code = REQUEST_INDEX_OUT_OF_BOUNDS;
+        return request_status;
+    }
 
-        // Check if the tag matches
-        if (strcmp(line->tag, request->tag) == 0) {
-            cache->hits++;
-            *data_found = true;
-        } else {
-            cache->misses++; 
-            if (line->dirty == 1) {
-                cache->read_to_write++;
-            }
+    // Create reference to line for clarity
+    Line* line = &cache->lines[index];
 
-            // Load the new tag, mark as clean
-            strcpy(line->tag, request->tag);
-            line->dirty = 0;
+    // Check if the tag matches
+    if (strcmp(line->tag, request->address.tag) == 0) {
+        cache->hits++;
+        *data_found = true;
+
+        // Debug print
+        if (DEBUG) {
+            fprintf(stdout, "Hit! address: %x\n", request->address.hex);
+        }
+    } else {
+        cache->misses++; 
+        if (line->dirty == true) {
+            cache->read_to_write++;
+        }
+
+        // Load the new tag, mark as clean
+        strcpy(line->tag, request->address.tag);
+        line->dirty = false;
+
+        // Debug print
+        if (DEBUG) {
+            fprintf(stdout, "Miss! address: %x\n", request->address.hex);
         }
     }
-    return request_error;
+
+    return request_status;
 }
 
 /**
  * @brief Writes data from a cache at the address specified in the request
- *        (This is where hit / miss stats are counted)
+ *        (This is where hit/miss stats are counted)
  * 
- * @param cache - pointer to cache layer the request will be performed on 
- * @param request - pointer to request to be processed 
- * @param data_found - flag that represents a hit made (TRUE if data is found : FALSE if data wasnt found)
+ * @param cache Pointer to cache layer the request will be performed on 
+ * @param request Pointer to request to be processed 
+ * @param data_found Output flag indicating cache hit (true) or miss (false)
  */
-request_error_info_t writeData(Cache* cache, Request* request, bool* data_found) {
-    request_error_info_t request_error = {
+request_status_t writeData(Cache* cache, Request* request, bool* data_found) {
+    request_status_t request_status = {
         .error_code = REQUEST_SUCCESS
     };
 
     // Convert index to integer
-    int index = btoi(request->index);
+    size_t index = btoi(request->address.index);
 
     // Check if index is within bounds
-    if (index >= 0 && index <= cache->num_lines) {
-        Line* line = &cache->lines[index];
+    if (index >= cache->num_lines) {
+        request_status.error_code = REQUEST_INDEX_OUT_OF_BOUNDS;
+        return request_status;
+    }
 
-        // If line found in cache
-        if (strcmp(line->tag, request->tag) == 0) {
-            cache->hits++;
-            line->dirty = 1;  // Data is now modified
-            *data_found = true;
-        } else {
-            cache->misses++;
-            if (line->dirty == 1) {
-                cache->write_to_write++;
-            }
+    // Create reference to line for clarity
+    Line* line = &cache->lines[index];
 
-            // Load the new tag, mark as clean
-            strcpy(line->tag, request->tag);
-            line->dirty = 1;
+    // If line found in cache
+    if (strcmp(line->tag, request->address.tag) == 0) {
+        cache->hits++;
+        *data_found = true;
+        line->dirty = true;  // data is now modified
+
+        // Debug print
+        if (DEBUG) {
+            fprintf(stdout, "Hit! address: %x\n", request->address.hex);
+        }
+
+    } else {
+        cache->misses++;
+        if (line->dirty == true) {
+            cache->write_to_write++;
+        }
+
+        // Load the new tag, mark as clean
+        strcpy(line->tag, request->address.tag);
+        line->dirty = false;
+
+        // Debug print
+        if (DEBUG) {
+            fprintf(stdout, "Miss! address: %x\n", request->address.hex);
         }
     }
-    return request_error;
+
+    return request_status;
 }
 
 
 //========================================================================
-//                         Additional Helpers       
+//                         Error Handling      
 //========================================================================
 
 /**
- * @brief Handles parameter errors and prints appropriate error message
+ * @brief Handles parameter validation errors and displays diagnostic messages
  * 
- * @param error - parameter error information
+ * @param error Parameter error status structure containing error details
+ * @return int Always returns EXIT_FAILURE to indicate program termination
  */
-int parameter_error_handler(parameter_error_info_t error) {
+int parameter_error_handler(parameter_status_t error) {
     fprintf(stderr, "Error: ");
+
     switch(error.error_code) {
+
         case PARAMETER_SUCCESS:
             fprintf(stderr, "PARAMETER_SUCCESS unintentionally passed to handler\n");
             break;
+
         case PARAMETER_INVALID_ARG_COUNT:
             fprintf(stderr, "Invalid number of arguments. Expected 8, received %d.\n"
                             "Usage: %s <cache_type> <line_size> <cache_layers>" 
-                            "<L1_size> <L2_size> <L3_size> <print_style>\n",
-                            error.argument_count, error.executable_name);
+                            "<L1_size_B> <L2_size_B> <L3_size_B> <print_style>\n",
+                             error.argument_count, error.executable_name);
             break;
+
         case PARAMETER_INVALID_CACHE_TYPE:
-            fprintf(stderr, "Invalid cache type '%c'.\n", error.cache_type);
+            fprintf(stderr, "Invalid cache type '%c'.\n", error.cache.type);
             break;
+
         case PARAMETER_INVALID_LINE_SIZE:
-            fprintf(stderr, "Invalid line size '%d'.\n", error.line_size);
+            fprintf(stderr, "Invalid line size '%zu'.\n", error.cache.line_size);
             break;
+
         case PARAMETER_INVALID_CACHE_LAYER_COUNT:
-            fprintf(stderr, "Invalid cache layer count '%d'.\n", error.cache_layers);
+            fprintf(stderr, "Invalid cache layer count '%zu'.\n", error.cache.num_layers);
             break;
+
         case PARAMETER_INVALID_CACHE_SIZE:
-            fprintf(stderr, "Invalid cache size '%d' for layer '%d'.\n", 
-                            error.cache_size, error.layer);
+            fprintf(stderr, "Invalid cache size '%zu' for layer '%u'.\n", 
+                             error.cache.size, error.cache.layer);
             break;
+
         case PARAMETER_INVALID_PRINT_STYLE:
-            fprintf(stderr, "Invalid print style '%d'.\n"
+            fprintf(stderr, "Invalid print style '%u'.\n"
                             "Usage: 1 = standard print | 2 = debug print\n", 
-                            error.print_style);
+                             error.print_style);
             break;
     }
     return EXIT_FAILURE;
 }
 
 /**
- * @brief Handles cache errors and prints appropriate error message
+ * @brief Handles cache errors and displays diagnostic messages
  * 
- * @param error - cache error information
+ * @param error Cache error status structure containing error details
+ * @return int Always returns EXIT_FAILURE to indicate program termination
  */
-int cache_error_handler(cache_error_info_t error) {
+int cache_error_handler(cache_status_t error) {
     fprintf(stderr, "Error: ");
+
     switch(error.error_code) {
+
         case CACHE_SUCCESS:
             fprintf(stderr, "CACHE_SUCCESS unintentionally passed to handler\n");
             break;
+
         case CACHE_ALLOCATION_FAILED:
             fprintf(stderr, "Failed to allocate memory for cache with following attributes.\n"
-                            "{Layer: %d | Cache Size: %d | Line Size: %d}\n", 
-                            error.layer, error.cache_size, error.line_size);
+                            "{Layer: %u | Cache Size: %zu | Line Size: %zu}\n", 
+                            error.cache.layer, error.cache.size, error.cache.line_size);
             break;
+
         case CACHE_LINE_ALLOCATION_FAILED:
             fprintf(stderr, "Failed to allocate memory for cache lines of cache with following attributes.\n"
-                            "{Layer: %d | Cache Size: %d | Line Size: %d}\n",
-                            error.layer, error.cache_size, error.line_size);
+                            "{Layer: %u | Cache Size: %zu | Line Size: %zu}\n",
+                            error.cache.layer, error.cache.size, error.cache.size);
             break;
+
         case CACHE_IS_NULL:   
             fprintf(stderr, "Cache instance is null.\n");
             break;
+
+        case CACHE_SIZE_NOT_POWER_OF_TWO:
+        fprintf(stderr, "Cache expects number of lines to be power of two, recieved \"%zu\"\nPlease adjust line_size\n",
+                        error.cache.num_lines);
+        break;
     }
     
     return EXIT_FAILURE;
 }
 
 /**
- * @brief Handles request errors and prints appropriate error message
+ * @brief Handles request errors and displays diagnostic messages
  * 
- * @param error - request error information
+ * @param error Request error status structure containing error details
+ * @return int Always returns EXIT_FAILURE to indicate program termination
  */
-int request_error_handler(request_error_info_t error) {
+int request_error_handler(request_status_t error) {
     fprintf(stderr, "Error: ");
+
     switch(error.error_code) {
+
         case REQUEST_SUCCESS:
             fprintf(stderr, "REQUEST_SUCCESS unintentionally passed to handler\n");
             break;
+
         case REQUEST_ALLOCATION_FAILED:
             fprintf(stderr, "Failed to allocate memory for request.\n");
             break;
+
         case REQUEST_INVALID_REFERENCE_TYPE:
             fprintf(stderr, "Invalid reference type '%c'.\n", error.ref_type);
             break;
+
         case REQUEST_INVALID_ACCESS_TYPE:
             fprintf(stderr, "Invalid access type '%c'.\n", error.access_type);
             break;
-        case REQUEST_BINARY_CONVERSION_FAILED:
-            fprintf(stderr, "Failed to convert address '%d' to binary.\n", error.address);
-            break;
+
         case REQUEST_IS_NULL:
             fprintf(stderr, "Request instance is null.\n");
             break;
+
         case REQUEST_ON_NULL_CACHE:   
             fprintf(stderr, "Cannot process request on a NULL cache.\n");
+            break;
+
+        case REQUEST_INDEX_OUT_OF_BOUNDS:   
+            fprintf(stderr, "Request of index \"%s\" out of bounds\n", error.index);
             break;
     }
     return EXIT_FAILURE;
@@ -710,53 +822,42 @@ int request_error_handler(request_error_info_t error) {
 // ========================================================================
 
 /**
- * @brief Converts an integer to binary
+ * @brief Converts 32-bit integer to binary string representation
  * 
- * @param num - number to be converted
- * @return char* - binary of number in string format
+ * @param binary Pointer to binary string
+ * @param hex Hex value of number to be converted
  */
-char* itob(int num) {
-    size_t numBits = sizeof(int) * 8;
-    char* binaryStr = (char*)malloc(numBits + 1);
-
-    // Check for null pointer
-    if (binaryStr == NULL) {
-        fprintf(stderr, "Memory allocation failed.\n");
-        return NULL;
+void itob(char* binary, unsigned int hex) {
+    for (int i = 31; i >= 0; i--) {
+        binary[31 - i] = ((hex >> i) & 1) ? '1' : '0';
     }
-
-    // Add null terminator
-    binaryStr[numBits] = '\0';
-
-    // Convert integer to binary string
-    for (size_t i = 0; i < numBits; ++i) {
-        binaryStr[numBits - 1 - i] = (num & (1 << i)) ? '1' : '0';
-    }
-
-    return binaryStr;
+    binary[32] = '\0';
 }
 
 /**
- * @brief Converts binary to an integer
+ * @brief Converts binary string to integer value
  * 
- * @param binary - binary value of a number
- * @return int - integer representation of binary
+ * @param binary Null-terminated binary string to convert
+ * @return int Decimal representation of binary input
  */
-int btoi(const char* binary) {
-    int value = 0;
-    size_t len = strlen(binary);
-
-    // Convert binary string to integer
-    for (size_t i = 0; i < len; ++i) {
-        value <<= 1;    // shift the current value to the left by one bit
+unsigned int btoi(const char* binary) {
+    unsigned int result = 0;
+    for (int i = 0; binary[i] != '\0' && i < 32; i++) {
+        result <<= 1;
         if (binary[i] == '1') {
-            value += 1; // add 1 if the current binary digit is 1
-        } else if (binary[i] != '0') {
-            fprintf(stderr, "Invalid character '%c' in binary string.\n", binary[i]);
-            return 0;   // return 0 or an appropriate error value
+            result |= 1;
         }
     }
-
-    return value;
+    return result;
 }
 
+/**
+ * @brief Checks if value is a power of two
+ * 
+ * @param n Value to check
+ * @return true 
+ * @return false 
+ */
+bool isPowerOfTwo(int n) {
+    return (n > 0) && ((n & (n - 1)) == 0);
+}

@@ -1,6 +1,7 @@
 # Cache Simulator
 
 A trace-driven cache simulator implementing a direct-mapped write-back cache hierarchy with configurable L1, L2, and L3 caches.
+Designed to test the SPEC95 benchmarks.
 
 ## Features
 
@@ -13,6 +14,23 @@ A trace-driven cache simulator implementing a direct-mapped write-back cache hie
   - Average Memory Access Time (AMAT)
   - Read-to-Write and Write-to-Write ratios
 
+## Supported Benchmarks
+
+- 099.go
+- 124.m88ksim
+- 126.gcc
+- 129.compress
+- 132.ijpeg
+- 134.perl
+
+### *NOTICE!*
+
+The benchmarks are too large to be contained within the repository. Please follow the below link to download these files.
+```
+https://drive.google.com/drive/folders/14rs7B_XDDwIt9W74svfScrMwoWW0kEBe?usp=sharing
+```
+Once downloaded make sure the are contained in a folder named "traces" within "Cache/"
+
 ## Building
 
 ### Prerequisites
@@ -20,20 +38,15 @@ A trace-driven cache simulator implementing a direct-mapped write-back cache hie
 - Make build system
 - Bash shell (for running tests)
 
-### Build Commands
+### Makefile
+
+To build the makefile:
+
+- Navigate to "src/"
+- Run
 ```bash
-# Standard build with optimizations
-make
-
-# Debug build with debug symbols
-make debug
-
-# Build with Address Sanitizer
-make asan
-
-# Generate documentation
-make docs
-```
+make all 
+``` 
 
 ## Usage
 
@@ -53,17 +66,19 @@ make docs
 ### Example
 ```bash
 # Single layer 8KB L1 cache with 4-word lines
-./cache_exec U 4 1 8 0 0 1 < traces/126.gcc
+./cache_exec U 4 1 8 0 0 1 < ../traces/126.gcc
 
-# Three layer cache hierarchy with detailed output
-./cache_exec D 8 3 16 64 256 2 < traces/132.ijpeg
+# Three layer cache hierarchy of (L1:16KB, L2:64KB, L3:256KB) with detailed output
+./cache_exec D 8 3 16 64 256 2 < ../traces/132.ijpeg
 ```
 
 ## Testing
 
 Run the full test suite:
 ```bash
-make test
+# Both scripts will recompile the source code upon invokation
+./run1.sh
+./run2.sh
 ```
 
 This will execute various cache configurations using the provided trace files.
@@ -85,10 +100,6 @@ Memory access times are modeled as follows:
 - Main Memory: 100 cycles
 
 AMAT (Average Memory Access Time) is calculated based on hit rates at each level.
-
-## License
-
-[Specify your license here]
 
 ## Author
 
