@@ -29,62 +29,69 @@ static int write_index = 7; // n-1 of bytesize
                           Reading Functions
 =================================================================== */
 
-/**
- * @brief Read the next bit from STDOUT in order of left to right.
- * 
- * @return unsigned short Value of next bit
- *         Valid character value: 0-255
- *         End of file signal: 256
- */
-unsigned short read_bit() {
-    unsigned short bit;
+ /**
+  * @brief Read the next bit from STDOUT into a buffer
+  * 
+  * @param byte Pointer to bit buffer to be loaded
+  *             Valid character value: 0-255
+  *             End of file signal: 256
+  * @return int 0 on success : negative on failure
+  */
+int read_bit(unsigned short* bit) {
 
     // Check if previous byte is done being read
     if (read_index < 0) {
 
         // Read next byte and reset byte index
-        size_t bytes_read = read(STDIN_FILENO, &read_buffer, 1);
-        read_index = 7; // moves index to read bytes MSB
+        ssize_t bytes_read = read(STDIN_FILENO, &read_buffer, 1);
+
+        if (bytes_read == -1) {
+            return ERR_READ_FAILURE;
+        }
 
         // Check for end of file.
         if (bytes_read == 0) {
-            return EOF_SIGNAL;
+            *bit =  EOF_SIGNAL;
+            return SUCCESS;
         }
+
+        read_index = 7; // move index to read bytes MSB
     }
 
     // Grab next bit from buffered byte from left -> right (MSB -> LSB)
-    bit = ((read_buffer >> read_index--) & 1);
+    *bit = ((read_buffer >> read_index--) & 1);
 
-    return bit;
+    return SUCCESS;
 }
 
-/**
- * @brief Read the next byte from STDOUT
- * 
- * @return unsigned short Value of next byte
- *         Valid character value: 0-255
- *         End of file signal: 256
- */
-unsigned short read_byte() {
-    unsigned short byte = 0;
+ /**
+  * @brief Read the next byte from STDOUT into a buffer
+  * 
+  * @param byte Pointer to byte buffer to be loaded
+  *             Valid character value: 0-255
+  *             End of file signal: 256
+  * @return int 0 on success : negative on failure
+  */
+int read_byte(unsigned short* byte) {
     unsigned short bit = 0;
 
     // Iterate each bit in byte
     for (int i = 7; i >= 0; i--) {
-        bit = read_bit();
+        CHECK_READ(read_bit(&bit));
 
         // Check for end of file.
         if (bit == EOF_SIGNAL) {
-            return EOF_SIGNAL;
+            *byte =  EOF_SIGNAL;
+            return SUCCESS;
         }
 
         // If bit is 1, XOR shift it, and simply skip 0's
         if (bit) {
-            byte |= (1 << i);
+            *byte |= (1 << i);
         }
     }
 
-    return byte;
+    return SUCCESS;
 }
 
 
@@ -109,11 +116,12 @@ int write_bit(unsigned char bit) {
 
     // If byte buffer is full, write it out.
     if (write_index < 0) {
-        size_t bytes_wrote = write(STDOUT_FILENO, &write_buffer, 1);
+        ssize_t bytes_wrote = write(STDOUT_FILENO, &write_buffer, 1);
         
         // Pass up write error
-        if (bytes_wrote == -1)
+        if (bytes_wrote == -1) {
             return ERR_WRITE_FAILURE;
+        }
         
         write_buffer = 0; // zero out buffer
         write_index = 7; // reset index to point to MSB
@@ -137,8 +145,9 @@ int write_byte(unsigned char byte) {
         status = write_bit(bit);
         
         // Check for write error
-        if(status == ERR_WRITE_FAILURE) 
+        if(status == ERR_WRITE_FAILURE) {
             return ERR_WRITE_FAILURE;
+        }
     }
 
     return SUCCESS;
@@ -157,8 +166,9 @@ int flush_write_buffer() {
         status = write_bit(1);
         
         // Check for write error
-        if(status == ERR_WRITE_FAILURE) 
+        if(status == ERR_WRITE_FAILURE) {
             return ERR_WRITE_FAILURE;
+        }
     }
 
     return SUCCESS;

@@ -4,7 +4,7 @@
  PROJECT: Compression and Decompression Algorithm
 ===========================================================================
  NAME: Tyler Neal
- DATE: 02/19/2025
+ DATE: 02/20/2025
  FILE NAME: compress.c
  DESCRIPTION:
     This program compresses the data stream directed at its standard input 
@@ -33,7 +33,8 @@ int main(int argc, char *argv[]) {
     while (true) {
 
         // Read the next byte.
-        byte = read_byte();
+        byte = 0;
+        CHECK_READ(read_byte(&byte));
 
         // Break at end of output stream
         if (byte == EOF_SIGNAL) {

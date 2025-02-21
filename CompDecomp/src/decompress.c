@@ -4,8 +4,8 @@
  PROJECT: Compression and Decompression Algorithm
 ===========================================================================
  NAME: Tyler Neal
- DATE: 02/19/2025
- FILE NAME: compress.c
+ DATE: 02/20/2025
+ FILE NAME: decompress.c
  DESCRIPTION:
     Main function for the dzy de-compression implementation.
   
@@ -29,7 +29,8 @@ int main(int argc, char *argv[]) {
     while (true) {
 
         // Read in next bit.
-        bit = read_bit();
+        bit = 0;
+        CHECK_READ(read_bit(&bit));
 
         // Break at end of input stream
         if (bit == EOF_SIGNAL) {
@@ -39,7 +40,9 @@ int main(int argc, char *argv[]) {
         // Bit indicates non-duplicate value
         if (bit == 1) {
 
-            byte = read_byte();
+            // Read next byte
+            byte = 0;
+            CHECK_READ(read_byte(&byte));
 
             // Check again for end of stream
             if (byte == EOF_SIGNAL) {
@@ -52,9 +55,9 @@ int main(int argc, char *argv[]) {
         } else if (bit == 0) {
 
             // Read the next 3 bits to determine the index of the previous byte.
-            unsigned int buffer[3];
+            unsigned short buffer[3];
             for (unsigned int i = 0; i < 3; i++) {
-                buffer[i] = read_bit();
+                CHECK_READ(read_bit(&buffer[i]));
             }
 
             // Convert the 3 bits to an integer index.

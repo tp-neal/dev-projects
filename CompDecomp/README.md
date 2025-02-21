@@ -60,18 +60,18 @@ Note: Compression ratios are calculated as `(compressed_size / original_size) * 
 
 ### Original Sizes:
 
-- `compress.c`: 2353 bytes
+- `compress.c`: 2381 bytes
 - `compress`: 16408 bytes
 
 ### Using 'Compression':
 
-- `compress.c.czy`: 1942 bytes (Compression ratio: 82.53%)
-- `compress.obj.czy`: 10006 bytes (Compression ratio: 50.03%)
+- `compress.c.czy`: 1964 bytes (Compression ratio: 82.49%)
+- `compress.obj.czy`: 10070 bytes (Compression ratio: 61.37%)
 
 ### Using 'Gzip':
 
-- `compress.c.gz`: 983 bytes (Compression ratio: 41.78%)
-- `compress.obj.gz`: 3113 bytes (Compression ratio: 18.97%)
+- `compress.c.gz`: 991 bytes (Compression ratio: 41.62%)
+- `compress.obj.gz`: 3154 bytes (Compression ratio: 19.22%)
 
 ## Author:
 
