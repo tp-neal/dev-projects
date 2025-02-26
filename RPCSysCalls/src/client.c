@@ -1,7 +1,7 @@
 
-/*******************************************************************************
+/***************************************************************************************************
 * @project: RPC System Calls
-********************************************************************************
+****************************************************************************************************
 * @file client.c
 * @brief Implementations of the client rpc request functions.
 *
@@ -11,8 +11,8 @@
 * errno if an error was encountered.
 *
 * @author Tyler Neal
-* @date 2/23/2025
-*******************************************************************************/
+* @date 2/26/2025
+***************************************************************************************************/
 
 #include <errno.h>
 #include <fcntl.h>
@@ -31,9 +31,9 @@
 #include "protocol.h"
 #include "util.h"
 
-/*==============================================================================
-                             Connection Setup
-==============================================================================*/
+/*==================================================================================================
+    Connection Setup
+==================================================================================================*/
 
 /**
  * @brief Connects to a remote server
@@ -68,27 +68,9 @@ int rp_connect(int* socket_fd, int port, char* hostname) {
     return RP_SUCCESS;
 }
 
-/*==============================================================================
-                          Client Specific Helpers
-==============================================================================*/
-
-/**
- * @brief Updates the local errno from the server's errno
- * 
- * @param server_fd Server connection file descriptor
- * @return 0 on success, -1 on error
- */
-int update_errno(int server_fd) {
-    uint32_t* errno_ptr = (uint32_t*)read_from_connection(server_fd);
-    if (!errno_ptr)
-        return -1;
-    errno = (int)ntohl(*errno_ptr);
-    return 0;
-}
-
-/*==============================================================================
-                                RPC Callers
-==============================================================================*/
+/*==================================================================================================
+    RPC Callers
+==================================================================================================*/
 
 /**
  * @brief Remote procedure call for open system call
@@ -104,18 +86,17 @@ int32_t rp_open(int server_fd, char* pathname, int flags, ...) {
     errno = CLIENT_ERROR_SENDING_RPC_ARGS;
     
     // Send call type to server
-    uint32_t call_code = OPEN_CALL;
-    uint32_t call_code_net = htonl((uint32_t)call_code);
-    if (send_to_connection(server_fd, &call_code_net, sizeof(call_code_net)) < 0)
+    uint32_t call_code_net = htonl(OPEN_CALL);
+    if (send_to_connection(server_fd, &call_code_net, sizeof(call_code_net)) == -1)
         return -1;
 
     // Send pathname
-    if (send_to_connection(server_fd, pathname, strlen(pathname)+1) < 0)
+    if (send_to_connection(server_fd, pathname, strlen(pathname)+1) == -1)
         return -1;
 
     // Send flags
     uint32_t flags_net = htonl((uint32_t)flags);
-    if (send_to_connection(server_fd, &flags_net, sizeof(flags_net)) < 0)
+    if (send_to_connection(server_fd, &flags_net, sizeof(flags_net)) == -1)
         return -1;
 
     // Send mode if creating a new file
@@ -125,24 +106,14 @@ int32_t rp_open(int server_fd, char* pathname, int flags, ...) {
         mode_t mode = va_arg(args, mode_t);
         va_end(args);
         uint32_t mode_net = htonl((uint32_t)mode);
-        if (send_to_connection(server_fd, &mode_net, sizeof(mode_net)) < 0)
+        if (send_to_connection(server_fd, &mode_net, sizeof(mode_net)) == -1)
             return -1;
     }
 
-    // Retrieve result from server
+    // Recieve result from server
     int32_t result;
-    if (read_data_of_type(&result, INT32, server_fd) == -1) {
-        errno = CLIENT_ERROR_RECIEVING_RPC_RESULT;
+    if (recieve_result(server_fd, &result, INT32) == -1)
         return -1;
-    }
-
-    // Update errno if neccessary
-    if (result == -1) {
-        if (update_errno(server_fd) == -1) {
-            errno = CLIENT_ERROR_RECIEVING_RPC_ERRNO;
-            return -1;
-        }
-    }
 
     return result;
 }
@@ -159,33 +130,22 @@ int32_t rp_close(int server_fd, int file_fd) {
     errno = CLIENT_ERROR_SENDING_RPC_ARGS;
     
     // Send call type to server
-    uint32_t call_code = CLOSE_CALL;
-    uint32_t call_code_net = htonl((uint32_t)call_code);
-    if (send_to_connection(server_fd, &call_code_net, sizeof(call_code_net)) < 0)
+    uint32_t call_code_net = htonl(CLOSE_CALL);
+    if (send_to_connection(server_fd, &call_code_net, sizeof(call_code_net)) == -1)
         return -1;
 
     // Send file descriptor
     uint32_t file_fd_net = htonl((uint32_t)file_fd);
-    if (send_to_connection(server_fd, &file_fd_net, sizeof(file_fd_net)) < 0)
+    if (send_to_connection(server_fd, &file_fd_net, sizeof(file_fd_net)) == -1)
         return -1;
 
-    // Retrieve result from server
+    // Recieve result from server
     int32_t result;
-    if (read_data_of_type(&result, INT32, server_fd) == -1) {
-        errno = CLIENT_ERROR_RECIEVING_RPC_RESULT;
+    if (recieve_result(server_fd, &result, INT32) == -1) {
         return -1;
-    }
-
-    // Update errno if neccessary
-    if (result == -1) {
-        if (update_errno(server_fd) == -1) {
-            errno = CLIENT_ERROR_RECIEVING_RPC_ERRNO;
-            return -1;
-        }
     }
 
     return result;
-    
 }
 
 /**
@@ -202,46 +162,37 @@ int32_t rp_read(int server_fd, int file_fd, char* buffer, size_t count) {
     errno = CLIENT_ERROR_SENDING_RPC_ARGS;
 
     // Send call type to server
-    uint32_t call_code = READ_CALL;
-    uint32_t call_code_net = htonl((uint32_t)call_code);
-    if (send_to_connection(server_fd, &call_code_net, sizeof(call_code_net)) < 0)
+    uint32_t call_code_net = htonl(READ_CALL);
+    if (send_to_connection(server_fd, &call_code_net, sizeof(call_code_net)) == -1)
         return -1;
 
     // Send file descriptor
     uint32_t file_fd_net = htonl((uint32_t)file_fd);
-    if (send_to_connection(server_fd, &file_fd_net, sizeof(file_fd_net)) < 0)
+    if (send_to_connection(server_fd, &file_fd_net, sizeof(file_fd_net)) == -1)
         return -1;
 
     // Send buffer
-    if (send_to_connection(server_fd, buffer, count) < 0)
+    if (send_to_connection(server_fd, buffer, count) == -1)
         return -1;
 
     // Send count
     uint32_t count_net = htonl((uint32_t)count);
-    if (send_to_connection(server_fd, &count_net, sizeof(count_net)) < 0)
+    if (send_to_connection(server_fd, &count_net, sizeof(count_net)) == -1)
         return -1;
 
-    // Retrieve result from server
+    // Recieve result from server
     int32_t data_read;
-    if (read_data_of_type(&data_read, INT32, server_fd) == -1) {
-        errno = CLIENT_ERROR_RECIEVING_RPC_RESULT;
+    if (recieve_result(server_fd, &data_read, INT32) == -1) {
         return -1;
     }
 
-    // Read in retrieved data
+    // Copy in data read
     if (data_read > 0) {
         char* remote_buffer = (char*)read_from_connection(server_fd);
         memcpy(buffer, remote_buffer, data_read);
         free(remote_buffer);
     }
-
-    // Update errno if neccessary
-    if (data_read == -1) {
-        if (update_errno(server_fd) == -1) {
-            errno = CLIENT_ERROR_RECIEVING_RPC_ERRNO;
-            return -1;
-        }
-    }
+   
 
     return data_read;
 }
@@ -260,46 +211,28 @@ int32_t rp_write(int server_fd, int file_fd, char* buffer, size_t count) {
     errno = CLIENT_ERROR_SENDING_RPC_ARGS;
 
     // Send call type to server
-    uint32_t call_code = WRITE_CALL;
-    uint32_t call_code_net = htonl((uint32_t)call_code);
-    if (send_to_connection(server_fd, &call_code_net, sizeof(call_code_net)) < 0)
+    uint32_t call_code_net = htonl(WRITE_CALL);
+    if (send_to_connection(server_fd, &call_code_net, sizeof(call_code_net)) == -1)
         return -1;
 
     // Send file descriptor
     uint32_t file_fd_net = htonl((uint32_t)file_fd);
-    if (send_to_connection(server_fd, &file_fd_net, sizeof(file_fd_net)) < 0)
+    if (send_to_connection(server_fd, &file_fd_net, sizeof(file_fd_net)) == -1)
         return -1;
 
     // Send buffer
-    if (send_to_connection(server_fd, buffer, count) < 0)
+    if (send_to_connection(server_fd, buffer, count) == -1)
         return -1;
 
     // Send count
     uint32_t count_net = htonl((uint32_t)count);
-    if (send_to_connection(server_fd, &count_net, sizeof(count_net)) < 0)
+    if (send_to_connection(server_fd, &count_net, sizeof(count_net)) == -1)
         return -1;
 
-    // Retrieve result from server
+    // Recieve result from server
     int32_t data_wrote;
-    if (read_data_of_type(&data_wrote, INT32, server_fd) == -1) {
-        errno = CLIENT_ERROR_RECIEVING_RPC_RESULT;
+    if (recieve_result(server_fd, &data_wrote, INT32) == -1)
         return -1;
-    }
-
-    // Read in retrieved data
-    if (data_wrote > 0) {
-        char* remote_buffer = (char*)read_from_connection(server_fd);
-        memcpy(buffer, remote_buffer, data_wrote);
-        free(remote_buffer);
-    }
-
-    // Update errno if neccessary
-    if (data_wrote == -1) {
-        if (update_errno(server_fd) == -1) {
-            errno = CLIENT_ERROR_RECIEVING_RPC_ERRNO;
-            return -1;
-        }
-    }
 
     return data_wrote;
 }
@@ -318,40 +251,29 @@ int32_t rp_lseek(int server_fd, int file_fd, off_t offset, int whence) {
     errno = CLIENT_ERROR_SENDING_RPC_ARGS;
 
     // Send call type to server
-    uint32_t call_code = LSEEK_CALL;
-    uint32_t call_code_net = htonl((uint32_t)call_code);
-    if (send_to_connection(server_fd, &call_code_net, sizeof(call_code_net)) < 0)
+    uint32_t call_code_net = htonl(LSEEK_CALL);
+    if (send_to_connection(server_fd, &call_code_net, sizeof(call_code_net)) == -1)
         return -1;
 
     // Send file descriptor
     uint32_t file_fd_net = htonl((uint32_t)file_fd);
-    if (send_to_connection(server_fd, &file_fd_net, sizeof(file_fd_net)) < 0)
+    if (send_to_connection(server_fd, &file_fd_net, sizeof(file_fd_net)) == -1)
         return -1;
 
     // Send offset
     uint32_t offset_net = htonl((uint32_t)offset);
-    if (send_to_connection(server_fd, &offset_net, sizeof(offset_net)) < 0)
+    if (send_to_connection(server_fd, &offset_net, sizeof(offset_net)) == -1)
         return -1;
 
-    // Send whence
+    // Send lseek origin
     uint32_t whence_net = htonl((uint32_t)whence);
-    if (send_to_connection(server_fd, &whence_net, sizeof(whence_net)) < 0)
+    if (send_to_connection(server_fd, &whence_net, sizeof(whence_net)) == -1)
         return -1;
 
-    // Retrieve result from server
+    // Recieve result from server
     int32_t result;
-    if (read_data_of_type(&result, INT32, server_fd) == -1) {
-        errno = CLIENT_ERROR_RECIEVING_RPC_RESULT;
+    if (recieve_result(server_fd, &result, INT32) == -1)
         return -1;
-    }
-
-    // Update errno if neccessary
-    if (result == -1) {
-        if (update_errno(server_fd) == -1) {
-            errno = CLIENT_ERROR_RECIEVING_RPC_ERRNO;
-            return -1;
-        }
-    }
 
     return result;
 }
@@ -369,8 +291,7 @@ int16_t rp_checksum(int server_fd, int file_fd, size_t block_size) {
     errno = CLIENT_ERROR_SENDING_RPC_ARGS;
 
     // Send call type to server
-    uint32_t call_code = CHECKSUM_CALL;
-    uint32_t call_code_net = htonl((uint32_t)call_code);
+    uint32_t call_code_net = htonl(CHECKSUM_CALL);
     if (send_to_connection(server_fd, &call_code_net, sizeof(call_code_net)) < 0)
         return -1;
 
@@ -384,20 +305,61 @@ int16_t rp_checksum(int server_fd, int file_fd, size_t block_size) {
     if (send_to_connection(server_fd, &block_size_net, sizeof(block_size_net)) < 0)
         return -1;
 
-    // Retrieve result from server
+    // Recieve result from server
     int16_t checksum;
-    if (read_data_of_type(&checksum, INT16, server_fd) == -1) {
+    if (recieve_result(server_fd, &checksum, INT16) < 0)
+        return -1;
+    
+    return checksum;
+}
+
+/*==================================================================================================
+    Client Specific Helpers
+==================================================================================================*/
+
+/**
+ * @brief Updates the local errno from the server's errno
+ * 
+ * @param server_fd Server connection file descriptor
+ * @return 0 on success, -1 on error
+ */
+ int update_errno(int server_fd) {
+    uint32_t* errno_ptr = (uint32_t*)read_from_connection(server_fd);
+    if (!errno_ptr)
+        return -1;
+    errno = (int)ntohl(*errno_ptr);
+    return 0;
+}
+
+/**
+ * @brief Recieve the return of a system call from the server, and an error code if an error 
+ *        occured.
+ * 
+ * @param server_fd File descriptor of the server connection
+ * @param result_buffer Numberic variable to load the recieved syscall result into
+ * @param type Type of variable being returned
+ * @param read_buffer Buffer for read data during read calls, otherwise NULL
+ * @return int 0 on success : 1 on error
+ */
+int recieve_result(int server_fd, void* result_buffer, var_type type) {
+
+    // Retrieve result from server
+    if (read_data_of_type(result_buffer, type, server_fd) == -1) {
         errno = CLIENT_ERROR_RECIEVING_RPC_RESULT;
         return -1;
     }
 
+    // Dereference the result
+    int32_t result;
+    memcpy(&result, result_buffer, sizeof(result));
+
     // Update errno if neccessary
-    if (checksum == -1) {
+    if (result == -1) {
         if (update_errno(server_fd) == -1) {
             errno = CLIENT_ERROR_RECIEVING_RPC_ERRNO;
             return -1;
         }
     }
-    
-    return checksum;
+
+    return 0;
 }

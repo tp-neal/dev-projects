@@ -1,7 +1,7 @@
 
-/*******************************************************************************
+/***************************************************************************************************
 * @project: RPC System Calls
-********************************************************************************
+****************************************************************************************************
 * @file user1.c
 * @brief Simulated user who opens a remote file, and copies it to a local file.
 *
@@ -18,8 +18,8 @@
 *   9. Prints whether the checksums match
 *
 * @author Tyler Neal
-* @date 2/23/2025
-*******************************************************************************/
+* @date 2/26/2025
+***************************************************************************************************/
 
 #include <fcntl.h>
 #include <stdio.h>
@@ -28,9 +28,9 @@
 #include "client.h"
 #include "util.h"
 
-/*==============================================================================
-                                   Main
-==============================================================================*/
+/*==================================================================================================
+    Main
+==================================================================================================*/
 
 /**
  * @brief Demonstrates a client connection to the server
@@ -68,7 +68,7 @@ int main(int argc, char** argv) {
     printf("[User : Info] Connected to server on port %d\n", port);
 
     // Open remote file
-    printf("[User : Info] Opening remote file: %s\n", "remote.md");
+    printf("[User : Info] Opening remote file: %s\n", remote_file_path);
     int remote_fd = rp_open(server_fd, remote_file_path, O_RDONLY);
     if (remote_fd < 0) {
         perror("[User : Error] - failed to open remote file");
@@ -86,7 +86,7 @@ int main(int argc, char** argv) {
     printf("[User : Info] Remote checksum: %hd\n", remote_checksum);
 
     // Open local file
-    printf("[User : Info] Creating local file: %s\n", "local_copy.md");
+    printf("[User : Info] Creating local file: %s\n", local_file_path);
     int local_file = open(local_file_path, O_CREAT | O_RDWR, 0744);
     if (local_file < 0) {
         perror("[User : Error] - failed to open local file");
@@ -104,12 +104,14 @@ int main(int argc, char** argv) {
     printf("[User : Info] Copying data from remote to local file...\n");
     ssize_t bytes_read, bytes_wrote, total_bytes_copied = 0;
     while ((bytes_read = rp_read(server_fd, remote_fd, buffer, USER_BUFFER_SIZE)) > 0) {
+        printf("*** Read in %zu bytes ***\n", bytes_read);
         if ((bytes_wrote = write(local_file, buffer, bytes_read)) == -1) {
             perror("[User : Error] - failed to write to local file");
             free(buffer);
             return -1;
         }
         total_bytes_copied += bytes_wrote;
+        printf("*** Wrote %zu bytes ***\n", bytes_wrote);
     } 
     printf("[User : Info] Copy complete (%zd bytes transferred)\n", total_bytes_copied);
     free(buffer);

@@ -1,7 +1,7 @@
 
-/*******************************************************************************
+/***************************************************************************************************
 * @project: RPC System Calls
-********************************************************************************
+****************************************************************************************************
 * @file server.c
 * @brief Connects to clients and performs remote protocol system calls.
 *
@@ -15,14 +15,15 @@
 *   6. Returns the results of the system call to the client
 *
 * @author Tyler Neal
-* @date 2/23/2025
-*******************************************************************************/
+* @date 2/26/2025
+***************************************************************************************************/
 
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 
@@ -37,9 +38,9 @@
 
 static int socket_fd;
 
-/*==============================================================================
-                                   Main
-==============================================================================*/
+/*==================================================================================================
+    Main
+==================================================================================================*/
 
 /**
  * @brief Main entry point for the server application
@@ -191,9 +192,9 @@ int main(int argc, char** argv) {
     return 0; // (this is dead code as parent runs until signal interrupt)
 }
 
-/*==============================================================================
-                           Server Setup / Handling
-==============================================================================*/
+/*==================================================================================================
+    Server Setup/Hanlding
+==================================================================================================*/
 
 /**
  * @brief Signal handler for handling interrupt signals
@@ -252,9 +253,9 @@ int setupServer(int* socket_fd, struct sockaddr_in* address, int port) {
     return RP_SUCCESS;
 }
 
-/*==============================================================================
-                               RPC Handlers
-==============================================================================*/
+/*==================================================================================================
+    RPC Handlers
+==================================================================================================*/
 
 /**
  * @brief Handles an open system call from the client
@@ -282,30 +283,19 @@ int handle_open(int client_fd) {
     // Get mode if necessary
     uint32_t mode;
     if (flags & O_CREAT) {
-        if (read_data_of_type(&mode, UINT32, client_fd) == -1){
+        if (read_data_of_type(&mode, UINT32, client_fd) == -1) {
             free(pathname);
             return -1;
         }
     }
 
-    // Perform call
+    // Perform call and return results
     errno = 0;
     int32_t result = (flags & O_CREAT) ?
         (int32_t) open(pathname, (int)flags, (mode_t)mode) :
         (int32_t) open(pathname, (int)flags);
-
-    // Return the result (INT32 due to potential to be negative)
-    if (send_data_of_type(&result, INT32, client_fd) == -1) {
-        errno = SERVER_ERROR_SENDING_RPC_RESULT;
+    if (return_result(client_fd, &result, INT32) == -1) {
         return -1;
-    }
-
-    // Send error number if necessary
-    if (result == -1) {
-        if (send_data_of_type(&errno, INT32, client_fd) == -1) {
-            errno = SERVER_ERROR_SENDING_RPC_ERRNO;
-            return -1;
-        }
     }
     
     free(pathname);
@@ -324,19 +314,15 @@ int handle_close(int client_fd) {
 
     // Get file descriptor
     uint32_t file_fd;
-    if (read_data_of_type(&file_fd, UINT32, client_fd) == -1)
+    if (read_data_of_type(&file_fd, UINT32, client_fd) == -1) {
         return -1;
+    }
 
     // Perform call and return results
     errno = 0;
     int32_t result = (int32_t)close(file_fd);
-    if (send_data_of_type(&result, INT32, client_fd) < 0)
+    if (return_result(client_fd, &result, INT32) == -1) {
         return -1;
-
-    // Send error number if necessary
-    if (result == -1) {
-        if (send_data_of_type(&errno, INT32, client_fd) == -1)
-            return -1;
     }
     
     return RP_SUCCESS;
@@ -354,13 +340,15 @@ int handle_read(int client_fd) {
 
     // Get file descriptor
     uint32_t file_fd;
-    if (read_data_of_type(&file_fd, UINT32, client_fd) == -1)
+    if (read_data_of_type(&file_fd, UINT32, client_fd) == -1) {
         return -1;
+    }
 
     // Get buffer
     char* buffer = (char*)read_from_connection(client_fd);
-    if (!buffer)
+    if (!buffer) {
         return -1;
+    }
 
     // Get count
     uint32_t count;
@@ -372,19 +360,16 @@ int handle_read(int client_fd) {
     // Perform call and return results
     errno = 0;
     int32_t data_read = (int32_t)read(file_fd, buffer, count);
-    if (send_data_of_type(&data_read, INT32, client_fd) < 0)
+    if (return_result(client_fd, &data_read, INT32) == -1) {
         return -1;
-
-    // Send back read data
-    if (data_read > 0) {
-        if (send_to_connection(client_fd, buffer, data_read) < 0)
-            return -1;
     }
 
-    // Send error number if necessary
-    if (data_read == -1) {
-        if (send_data_of_type(&errno, INT32, client_fd) == -1)
+    // Send back data if data was actually read
+    if (data_read > 0) {
+        if (send_to_connection(client_fd, buffer, data_read) == -1) {
+            errno = SERVER_ERROR_SENDING_RPC_ERRNO;
             return -1;
+        }
     }
     
     free(buffer);
@@ -403,13 +388,15 @@ int handle_write(int client_fd) {
 
     // Get file descriptor
     uint32_t file_fd;
-    if (read_data_of_type(&file_fd, UINT32, client_fd) == -1)
+    if (read_data_of_type(&file_fd, UINT32, client_fd) == -1) {
         return -1;
+    }
 
     // Get buffer
     char* buffer = (char*)read_from_connection(client_fd);
-    if (!buffer)
+    if (!buffer) {
         return -1;
+    }
 
     // Get count
     uint32_t count;
@@ -421,19 +408,8 @@ int handle_write(int client_fd) {
     // Perform call and return results
     errno = 0;
     int32_t data_wrote = (int32_t)write(file_fd, buffer, count);
-    if (send_data_of_type(&data_wrote, INT32, client_fd) < 0)
+    if (return_result(client_fd, &data_wrote, INT32) == -1) {
         return -1;
-
-    // Send back read data
-    if (data_wrote > 0) {
-        if (send_to_connection(client_fd, buffer, data_wrote) < 0)
-            return -1;
-    }
-
-    // Send error number if necessary
-    if (data_wrote == -1) {
-        if (send_data_of_type(&errno, INT32, client_fd) == -1)
-            return -1;
     }
     
     free(buffer);
@@ -452,32 +428,27 @@ int handle_lseek(int client_fd) {
 
     // Get file descriptor
     uint32_t file_fd;
-    if (read_data_of_type(&file_fd, UINT32, client_fd) == -1)
+    if (read_data_of_type(&file_fd, UINT32, client_fd) == -1) {
         return -1;
-
-    // Set errno for early exit
-    errno = SERVER_ERROR_RECIEVING_RPC_ARGS;
+    }
 
     // Get offset
     int32_t offset;
-    if (read_data_of_type(&offset, INT32, client_fd) == -1)
+    if (read_data_of_type(&offset, INT32, client_fd) == -1) {
         return -1;
+    }
 
-    // Get file descriptor
+    // Get seek origin
     uint32_t whence;
-    if (read_data_of_type(&whence, UINT32, client_fd) == -1)
+    if (read_data_of_type(&whence, UINT32, client_fd) == -1) {
         return -1;
+    }
 
     // Perform call and return results
     errno = 0;
     int32_t result = (int32_t)lseek(file_fd, offset, whence);
-    if (send_data_of_type(&result, INT32, client_fd) < 0)
+    if (return_result(client_fd, &result, INT32) == -1) {
         return -1;
-
-    // Send error number if necessary
-    if (result == -1) {
-        if (send_data_of_type(&errno, INT32, client_fd) == -1)
-            return -1;
     }
 
     return RP_SUCCESS;
@@ -495,25 +466,58 @@ int handle_checksum(int client_fd) {
 
     // Get file descriptor
     uint32_t file_fd;
-    if (read_data_of_type(&file_fd, UINT32, client_fd) == -1)
+    if (read_data_of_type(&file_fd, UINT32, client_fd) == -1) {
         return -1;
-
-    // Get file descriptor
+    }
+    // Get block size
     uint32_t block_size;
-    if (read_data_of_type(&block_size, UINT32, client_fd) == -1)
+    if (read_data_of_type(&block_size, UINT32, client_fd) == -1) {
         return -1;
+    }
 
     // Perform call and return results
     errno = 0;
     int16_t checksum = genChecksum(file_fd, block_size);
-    if (send_data_of_type(&checksum, INT16, client_fd) < 0)
+    if (return_result(client_fd, &checksum, INT16) == -1) {
         return -1;
-
-    // Send error number if necessary
-    if (checksum == -1) {
-        if (send_data_of_type(&errno, INT32, client_fd) == -1)
-            return -1;
     }
     
     return RP_SUCCESS;
+}
+
+/*==================================================================================================
+    RPC Handler Helpers
+==================================================================================================*/
+
+/**
+ * @brief Returns the result of a system call to the user, and sends an updated error number if
+ *        necessary.
+ * 
+ * @param client_fd Client file descriptor to write result to
+ * @param result_ptr Pointer to the numeric result of the system call to be sent back
+ * @param type Variable type of the result being sent back
+ * @param return_buffer Return buffer to be sent if RPC was a read, otherwise NULL
+ * @return int 0 on success : -1 on error
+ */
+int return_result(int client_fd, void* result_ptr, var_type type) {
+
+    // Copy int value of result
+    int result;
+    memcpy(&result, result_ptr, sizeof(result));
+
+    // Send result of operation back to user
+    if (send_data_of_type(result_ptr, type, client_fd) < 0) {
+        errno = SERVER_ERROR_SENDING_RPC_RESULT;
+        return -1;
+    }
+
+    // Send errno if neccessary
+    if (result == -1) {
+        if (send_data_of_type(&errno, INT32, client_fd) == -1) {
+            errno = SERVER_ERROR_SENDING_RPC_ERRNO;
+            return -1;
+        }
+    }
+
+    return 0;
 }

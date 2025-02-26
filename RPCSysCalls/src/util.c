@@ -1,14 +1,14 @@
 
-/*******************************************************************************
+/***************************************************************************************************
 * @project: RPC System Calls
-********************************************************************************
+****************************************************************************************************
 * @file util.c
 * @brief Contains utility function definitions used in both the client and the
 *        server.
 *
 * @author Tyler Neal
-* @date 2/23/2025
-*******************************************************************************/
+* @date 2/26/2025
+***************************************************************************************************/
 
 #include <errno.h>
 #include <stdio.h>
@@ -23,9 +23,9 @@
 #include "protocol.h"
 #include "util.h"
 
-/*==============================================================================
-                        Server & Client Reading/Writing
-==============================================================================*/
+/*==================================================================================================
+    Server & Client Reading/Writing
+==================================================================================================*/
 
 /**
  * @brief Reads data from a file descriptor. First the size of the data is
@@ -78,7 +78,7 @@ void* read_from_connection(int fd) {
  * @param fd File descriptor to write to
  * @param data Pointer to the data to be sent
  * @param data_size Size of the data in bytes
- * @return RP_SUCCESS on success, -1 on error with errno set
+ * @return 0 on success, -1 on error with errno set
  */
 int send_to_connection(int fd, void* data, size_t data_size) {
     size_t data_size_net = htonl(data_size);
@@ -93,7 +93,7 @@ int send_to_connection(int fd, void* data, size_t data_size) {
         return -1;
     }
 
-    return RP_SUCCESS;
+    return 0;
 }
 
 /**
@@ -182,7 +182,7 @@ int send_data_of_type(void* result, var_type type, int client_fd) {
             errno = SERVER_INVALID_RESULT_TYPE;
             return -1;
     }
-    return RP_SUCCESS;
+    return 0;
 }
 
 /**
