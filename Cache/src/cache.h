@@ -2,51 +2,52 @@
 #ifndef CACHE_H
 #define CACHE_H
 
+/***************************************************************************************************
+* @project: Direct-Mapped Write-Back Cache [Trace Driven Simulation]
+****************************************************************************************************
+* @file cache.h
+* @brief Contains structures and function declarations related to the sumulation 
+         logic.
+*
+* @author Tyler Neal
+* @date 2/26/2025
+***************************************************************************************************/
+
+#include <stdlib.h>
 #include <stdbool.h>
+
+#include "config.h"
 #include "error.h"
 
-/* ===================================================================
-                            Definitions
-=================================================================== */
+/*==================================================================================================
+    Cache/Request Structures/Enums
+==================================================================================================*/
 
-// Memory request times (ms) - used in statistic calculations
-#define HIT_TIME_L1 1
-#define HIT_TIME_L2 16
-#define HIT_TIME_L3 64
-#define MEM_ACCESS_TIME 100
-
-// According to our implementation, these values wont exceed their defined max
-#define INSTRUCTION_SIZE 32
-#define MAX_TAG_SIZE 21
-#define MAX_INDEX_SIZE 16
-#define MAX_OFFSET_SIZE 5
-
-// Used for debug printing
-#define DEBUG false
-
-/* ==================================================================/
-/                       Structures and Enums                         /
-/================================================================== */
-
-/***************| Cache |***************/
-typedef struct Line {
-  bool dirty; // represents the dirty bit
-  char tag[INSTRUCTION_SIZE];
-} Line;
+/***************| Types |***************/
+typedef enum {
+	UNIFIED = 'U', // both Data and Instruction
+	DATA = 'D',
+	INSTRUCTION = 'I'
+} reference_type_e;
 
 typedef enum {
-	UNIFIED = 'U',     // Both Data and Instruction
-	DATA = 'D',        // Data
-	INSTRUCTION = 'I'  // Instruction
-} Cache_Type;
+	READ = 'R',
+	WRITE = 'W',
+} access_type_e;
 
-typedef struct Cache {
+/***************| Cache |***************/
+typedef struct {
+  bool dirty; // represents the dirty bit
+  char tag[INSTRUCTION_SIZE];
+} line_s;
+
+typedef struct {
   // Cache Details
-  unsigned int layer;      // (e.g L1, L2, L3)
-  size_t cache_size; // (bytes)
-  size_t line_size;  // (bytes)
-  size_t num_lines;  // (lines/block)
-  Line *lines;
+  size_t layer;         // (e.g L1, L2, L3)
+  size_t cache_size;    // (bytes)
+  size_t line_size;     // (bytes)
+  size_t num_lines;     // (lines/block)
+  line_s *lines;
 
   // Feild Sizes
   unsigned int tag_size;
@@ -57,12 +58,12 @@ typedef struct Cache {
   size_t requests;
   size_t hits;
   size_t misses;
-  size_t read_to_write;
-  size_t write_to_write;
-} Cache;
+  size_t read_to_write;     // reads resulting in write-backs
+  size_t write_to_write;    // writes resulting in write-backs
+} cache_s;
 
 /***************| Request |***************/
-typedef struct Address { 
+typedef struct { 
   unsigned int hex;
   char binary[33]; // temp size
 
@@ -75,17 +76,35 @@ typedef struct Address {
   char offset[INSTRUCTION_SIZE+1];
   unsigned int offset_size;
 
-} Address;
+} address_s;
 
-typedef struct Request {
-  Cache_Type ref_type;
-  char access_type;
-  Address address;
-} Request;
+typedef struct {
+  reference_type_e ref_type;
+  access_type_e access_type;
+  address_s address;
+} request_s;
 
-/* ===================================================================
-                      Function Declarations
-=================================================================== */
+/*==================================================================================================
+    Environment Structures
+==================================================================================================*/
+
+typedef struct {
+    cache_s* cache[3];
+    size_t cache_layers;
+    size_t layer_sizes[3];
+    reference_type_e cache_type;
+    size_t line_size;
+    unsigned int print_style;
+} environment_info_s;
+
+/*==================================================================================================
+    Simulation Function Declarations
+==================================================================================================*/
+
+/***************| Parameter Handling |***************/
+
+error_status_s retrieveParameters(environment_info_s* env_info, int argc, char** argv);
+
 
 /***************| Cache |***************/
 /**
@@ -97,144 +116,41 @@ typedef struct Request {
  * @param line_size Size of each cache line in bytes
  * @return cache_status_t Status structure with error code and cache metadata
  */
-cache_status_t allocateCache(Cache** cache, unsigned int layer, size_t cache_size, size_t line_size);
+error_status_s allocateCache(cache_s** cache, size_t layer, size_t cache_size, size_t line_size);
 
-/**
- * @brief Deallocates memory for a cache given its pointer
- * 
- * @param cache Pointer to cache to be destroyed
- */
-void destroyCache(Cache* cache);
+void destroyCache(cache_s* cache);
 
-/**
- * @brief Initializes cache structure and calculates address field sizes
- * 
- * @param cache Double pointer to cache instance to initialize
- * @param layer Cache layer number (1-3)
- * @param cache_size Total size of cache in bytes
- * @param line_size Size of each cache line in bytes
- * @return cache_status_t Status structure with error code and cache metadata
- */
-cache_status_t setupCache(Cache** cache, unsigned int layer, size_t cache_size, size_t line_size);
-
-/**
- * @brief Prints cache statistics and configuration details
- * 
- * @param cache Pointer to cache instance to display stats for
- * @param style Output style (1 = compact, 2 = verbose)
- * @return cache_status_t Status structure with error code
- */
-cache_status_t printCacheStats(Cache* cache, unsigned int style);
+error_status_s setupCache(cache_s** cache, size_t layer, size_t cache_size, size_t line_size);
 
 
 /***************| Request |***************/
-/**
- * @brief Allocates memory for a memory request object
- * 
- * @param request Double pointer to request instance to allocate
- * @return request_status_t Status structure with error code
- */
-request_status_t allocateRequest(Request** request);
 
-/**
- * @brief Deallocates memory for a request given its pointer
- * 
- * @param request Pointer to request to be free'd
- */
-void destroyRequest(Request* request);
+error_status_s allocateRequest(request_s** request);
 
-/**
- * @brief Parses trace input and formats memory request for cache processing
- * 
- * @param request Pointer to request object to populate
- * @param cache Pointer to target cache for address field calculations
- * @param buffer Input string containing trace data (format: @<I/D><R/W><hex-address>)
- * @return request_status_t Status structure with error code
- */
-request_status_t formatRequest(Request* request, Cache* cache, const char* buffer);
+void destroyRequest(request_s* request);
 
-/**
- * @brief Processes a memory request through the cache hierarchy
- * 
- * @param request Pointer to request object containing memory operation details
- * @param cache Pointer to target cache layer
- * @param data_found Output flag indicating cache hit (true) or miss (false)
- * @return request_status_t Status structure with error code
- */
-request_status_t processRequest(Request* request, Cache* cache, bool* data_found);
+error_status_s formatRequest(request_s* request, cache_s* cache, const char* buffer);
 
-/**
- * @brief Reads data from a cache at the address specified in the request.
- *        (This is where hit/miss stats are counted)
- *        
- * 
- * @param cache Pointer to cache layer the request will be performed on
- * @param request Pointer to request to be processed
- * @param data_found Output flag indicating cache hit (true) or miss (false)
- */
-request_status_t readData(Cache* cache, Request* request, bool* data_found);
+error_status_s formatRequestAddressFields(request_s* request, const char* buffer);
 
-/**
- * @brief Writes data from a cache at the address specified in the request
- *        (This is where hit/miss stats are counted)
- * 
- * @param cache Pointer to cache layer the request will be performed on 
- * @param request Pointer to request to be processed 
- * @param data_found Output flag indicating cache hit (true) or miss (false)
- */
-request_status_t writeData(Cache* cache, Request* request, bool* data_found);
+error_status_s processRequest(request_s* request, cache_s* cache, bool* hit_occured);
 
 
-/***************| Error Handling |***************/
-/**
- * @brief Handles parameter validation errors and displays diagnostic messages
- * 
- * @param error Parameter error status structure containing error details
- * @return int Always returns EXIT_FAILURE to indicate program termination
- */
-int parameter_error_handler(parameter_status_t error);
+/***************| Printing |***************/
 
-/**
- * @brief Handles cache errors and displays diagnostic messages
- * 
- * @param error Cache error status structure containing error details
- * @return int Always returns EXIT_FAILURE to indicate program termination
- */
-int cache_error_handler(cache_status_t error);
+error_status_s printResults(environment_info_s env);
 
-/**
- * @brief Handles request errors and displays diagnostic messages
- * 
- * @param error Request error status structure containing error details
- * @return int Always returns EXIT_FAILURE to indicate program termination
- */
-int request_error_handler(request_status_t error);
+error_status_s printCacheStats(cache_s* cache, unsigned int print_style);
+
+void printAMAT(cache_s** cache, size_t layers);
 
 
 /***************| Additional Helpers |***************/
-/**
- * @brief Converts 32-bit integer to binary string representation
- * 
- * @param binary Pointer to binary string
- * @param hex Hex value of number to be converted
- */
-void itob(char* binary, unsigned int hex);
 
-/**
- * @brief Converts binary string to integer value
- * 
- * @param binary Null-terminated binary string to convert
- * @return int Decimal representation of binary input
- */
-unsigned int btoi(const char* binary);
+void hexToBinaryString(char* binary, unsigned int hex);
 
-/**
- * @brief Checks if value is a power of two
- * 
- * @param n Value to check
- * @return true 
- * @return false 
- */
+unsigned int binaryStringToInt(const char* binary);
+
 bool isPowerOfTwo(int n);
 
 

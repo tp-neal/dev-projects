@@ -2,126 +2,131 @@
 #ifndef ERROR_H
 #define ERROR_H
 
+/***************************************************************************************************
+* @project: Direct-Mapped Write-Back Cache [Trace Driven Simulation]
+****************************************************************************************************
+* @file cache.h
+* @brief Contains macro and structure definitions, as well as function 
+         declarations relating to error handling in the simulation.
+*
+* @author Tyler Neal
+* @date 2/26/2025
+***************************************************************************************************/
+
 #include <stdio.h>
 #include <stdlib.h>
 
-/* ===================================================================
-                              Macros
-=================================================================== */
-#define INSTRUCTION_SIZE 32
+#include "config.h"
 
-// Macro for evaluating and handling a request error
-#define REQUEST_ERR_CHECK(err_info) do {            \
-    if (err_info.error_code != REQUEST_SUCCESS) {   \
-        return request_error_handler(err_info);     \
+/*==================================================================================================
+    Macros
+==================================================================================================*/
+
+// Macro for evaluating and handling an error
+#define ERR_CHECK(err_info) do {                    \
+    if (err_info.code != ERR_SUCCESS) {             \
+        return handle_error(err_info);              \
     }                                               \
-} while(0)
+} while(0);
 
-// Macro for evaluating and handling a cache error
-#define CACHE_ERR_CHECK(err_info) do {              \
-    if (err_info.error_code != CACHE_SUCCESS) {     \
-        return cache_error_handler(err_info);       \
-    }                                               \
-} while(0)
+/*==================================================================================================
+    Specific Error Data Structures
+==================================================================================================*/
 
-/* ===================================================================
-                      Info Container Structures
-=================================================================== */
+// Parameter-related error data
+typedef struct {
+    char* executable_name;
+    unsigned int arg_count;
+    unsigned int print_style;
+} parameter_error_data_s;
+
+// Cache-related error data
 typedef struct {
     char type;
     unsigned int layer;
-    size_t num_layers;
+    unsigned int num_layers;
+    size_t size;
     size_t line_size;
     size_t num_lines;
-    size_t size;
-} cache_info;
+} cache_error_data_s;
 
-/* ===================================================================
-                      Parameter Error Handling
-=================================================================== */
-
-typedef enum {
-    PARAMETER_SUCCESS = 0,
-    PARAMETER_INVALID_ARG_COUNT = -1,
-    PARAMETER_INVALID_CACHE_TYPE = -2,
-    PARAMETER_INVALID_LINE_SIZE = -3,
-    PARAMETER_INVALID_CACHE_LAYER_COUNT = -4,
-    PARAMETER_INVALID_CACHE_SIZE = -5,
-    PARAMETER_INVALID_PRINT_STYLE = -6
-} parameter_error_t;
-
+// Request-related error data
 typedef struct {
-    parameter_error_t error_code;
-    char* executable_name;
-    unsigned int argument_count;
-    cache_info cache;
-    unsigned int print_style;
-} parameter_status_t;
-
-/* ===================================================================
-                        Cache Error Handling
-=================================================================== */
-
-typedef enum {
-    CACHE_SUCCESS = 0,
-    CACHE_ALLOCATION_FAILED = -1,
-    CACHE_LINE_ALLOCATION_FAILED = -2,
-    CACHE_IS_NULL = -3,
-    CACHE_SIZE_NOT_POWER_OF_TWO = -4
-} cache_error_t;
-
-typedef struct {
-    cache_error_t error_code;
-    cache_info cache;
-} cache_status_t;
-
-/* ===================================================================
-                      Request Error Handling
-=================================================================== */
-
-typedef enum {
-    REQUEST_SUCCESS = 0,
-    REQUEST_ALLOCATION_FAILED = -1,
-    REQUEST_INVALID_REFERENCE_TYPE = -2,
-    REQUEST_INVALID_ACCESS_TYPE = -3,
-    REQUEST_IS_NULL = -4,
-    REQUEST_ON_NULL_CACHE = -5,
-    REQUEST_INDEX_OUT_OF_BOUNDS = -6
-} request_error_t;
-
-typedef struct {
-    request_error_t error_code;
+    char str_trace[TRACE_SIZE];
     char ref_type;
     char access_type;
-    unsigned int hex_address;
-    char tag[INSTRUCTION_SIZE];
-    char index[INSTRUCTION_SIZE];
-    char offset[INSTRUCTION_SIZE];
-} request_status_t;
+    int index;
+    size_t max_cache_index;
+} request_error_data_s;
 
-/* ===================================================================
-                      Error Handler Functions
-=================================================================== */
+/*==================================================================================================
+    General Error Structures
+==================================================================================================*/
 
-/**
- * @brief Handles parameter errors and prints appropriate error message
- * 
- * @param error - parameter error information
- */
-int parameter_error_handler(parameter_status_t error);
+// Error domains
+typedef enum {
+    ERROR_NONE = 0,
+    ERROR_PARAMETER,
+    ERROR_CACHE,
+    ERROR_REQUEST
+} error_domain_s;
 
-/**
- * @brief Handles cache errors and prints appropriate error message
- * 
- * @param error - cache error information
- */
-int cache_error_handler(cache_status_t error);
+// Error codes
+typedef enum {
+    // Success
+    ERR_SUCCESS = 0,
 
-/**
- * @brief Handles request errors and prints appropriate error message
- * 
- * @param error - request error information
- */
-int request_error_handler(request_status_t error);
+    // Failure
+    ERR_FAILURE = -1,
+    
+    // Parameter errors (-100 to -199)
+    ERR_INVALID_ARG_COUNT = -100,
+    ERR_INVALID_CACHE_TYPE = -101,
+    ERR_INVALID_LINE_SIZE = -102,
+    ERR_INVALID_CACHE_LAYER_COUNT = -103,
+    ERR_INVALID_CACHE_SIZE = -104,
+    ERR_INVALID_PRINT_STYLE = -105,
+    
+    // Cache errors (-200 to -299)
+    ERR_CACHE_ALLOCATION_FAILED = -200,
+    ERR_CACHE_LINE_ALLOCATION_FAILED = -201,
+    ERR_CACHE_IS_NULL = -202,
+    ERR_CACHE_SIZE_NOT_POWER_OF_TWO = -203,
+    
+    // Request errors (-300 to -399)
+    ERR_REQUEST_ALLOCATION_FAILED = -300,
+    ERR_INVALID_REFERENCE_TYPE = -301,
+    ERR_INVALID_ACCESS_TYPE = -302,
+    ERR_REQUEST_IS_NULL = -303,
+    ERR_REQUEST_ON_NULL_CACHE = -304,
+    ERR_REQUEST_INDEX_OUT_OF_BOUNDS = -305,
+    ERR_FAILED_TO_FORMAT_ADDRESS_HEX = -306,
+} error_code_s;
+
+// Unified error status structure
+typedef struct {
+    error_domain_s domain;
+    error_code_s code;
+    
+    // Error-specific data
+    union {
+        parameter_error_data_s param;
+        cache_error_data_s cache;
+        request_error_data_s request;
+    };
+} error_status_s;
+
+/*==================================================================================================
+    Error Handler Function Declarations
+==================================================================================================*/
+
+int handle_error(error_status_s error);
+
+int handle_param_error(error_status_s error);
+
+int handle_cache_error(error_status_s error);
+
+int handle_request_error(error_status_s error);
+
 
 #endif // CACHE_H

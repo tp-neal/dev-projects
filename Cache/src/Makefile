@@ -3,21 +3,20 @@ CC = gcc
 FLAGS = -Wall -Wextra
 
 # Project files
-OBJ_FILES = main.o
 EXE_FILE = cache_exec
-HEADER_FILES = cache.h error.h
+OBJ_FILES = cache.o
+HEADER_FILES = cache.h config.h error.h
 
 # Default target
 all: $(EXE_FILE)
 
 $(EXE_FILE): $(OBJ_FILES)
-	$(CC) $(FLAGS) -o $@ $^ -lm
+	$(CC) $(FLAGS) -o $@ $< -lm
 
-main.o: main.c $(HEADER_FILES)
-	$(CC) $(FLAGS) -o $@ -c $<
-
-
-.PHONY: all clean
+cache.o: cache.c $(HEADER_FILES)
+	$(CC) $(FLAGS) -c $<
 
 clean:
-	rm -f $(OBJ_FILES) $(EXE_FILE)
+	rm -f $(EXE_FILE) $(OBJ_FILES)
+
+.PHONY: all clean
