@@ -27,7 +27,7 @@ typedef enum {
     INT32,
     UINT32,
     INT16,
-} var_type;
+} var_type_e;
 
 /*==================================================================================================
     Function Declarations
@@ -36,8 +36,8 @@ typedef enum {
 /* File Descriptor Reading/Writing */
 void* read_from_connection(int fd);
 int send_to_connection(int fd, void* data, size_t data_size);
-int read_data_of_type(void* var, var_type type, int client_fd);
-int send_data_of_type(void* result, var_type type, int client_fd);
+int read_data_of_type(void* var, var_type_e type, int client_fd);
+int send_data_of_type(void* result, var_type_e type, int client_fd);
 
 /* Additional Helpers */
 char* strCallType(int call_type);

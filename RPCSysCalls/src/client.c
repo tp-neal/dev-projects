@@ -141,9 +141,8 @@ int32_t rp_close(int server_fd, int file_fd) {
 
     // Recieve result from server
     int32_t result;
-    if (recieve_result(server_fd, &result, INT32) == -1) {
+    if (recieve_result(server_fd, &result, INT32) == -1) 
         return -1;
-    }
 
     return result;
 }
@@ -182,9 +181,8 @@ int32_t rp_read(int server_fd, int file_fd, char* buffer, size_t count) {
 
     // Recieve result from server
     int32_t data_read;
-    if (recieve_result(server_fd, &data_read, INT32) == -1) {
+    if (recieve_result(server_fd, &data_read, INT32) == -1) 
         return -1;
-    }
 
     // Copy in data read
     if (data_read > 0) {
@@ -341,7 +339,7 @@ int16_t rp_checksum(int server_fd, int file_fd, size_t block_size) {
  * @param read_buffer Buffer for read data during read calls, otherwise NULL
  * @return int 0 on success : 1 on error
  */
-int recieve_result(int server_fd, void* result_buffer, var_type type) {
+int recieve_result(int server_fd, void* result_buffer, var_type_e type) {
 
     // Retrieve result from server
     if (read_data_of_type(result_buffer, type, server_fd) == -1) {

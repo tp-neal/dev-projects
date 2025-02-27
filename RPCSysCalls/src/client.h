@@ -40,6 +40,6 @@ int16_t rp_checksum(int server_fd, int file_fd, size_t block_size);
 
 /* Client Specific Helpers */
 int update_errno(int server_fd);
-int recieve_result(int server_fd, void* result_buffer, var_type type);
+int recieve_result(int server_fd, void* result_buffer, var_type_e type);
 
 #endif // CLIENT_H

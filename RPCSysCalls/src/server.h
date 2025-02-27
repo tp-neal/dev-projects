@@ -23,7 +23,7 @@
     Function Declarations
 ==================================================================================================*/
 
-/* Server Setup / Hanlding*/
+/* Server Setup / Signal Hanlding */
 void interrupt_handler(int sig_number);
 int setupServer(int* socket_fd, struct sockaddr_in* address, int port);
 
@@ -36,6 +36,6 @@ int handle_lseek(int client_fd);
 int handle_checksum(int client_fd);
 
 /* RPC Handler Helpers */
-int return_result(int client_fd, void* result_ptr, var_type type);
+int return_result(int client_fd, void* result_ptr, var_type_e type);
 
 #endif // SERVER_H

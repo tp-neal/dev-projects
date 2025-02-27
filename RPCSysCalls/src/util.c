@@ -104,7 +104,7 @@ int send_to_connection(int fd, void* data, size_t data_size) {
  * @param client_fd Client connection file descriptor
  * @return 0 on success, -1 on error with errno set
  */
-int read_data_of_type(void* var, var_type type, int client_fd) {
+int read_data_of_type(void* var, var_type_e type, int client_fd) {
     switch (type) {
         case INT32: {
             int32_t* int_ptr = (int32_t*)read_from_connection(client_fd);
@@ -131,7 +131,7 @@ int read_data_of_type(void* var, var_type type, int client_fd) {
             break;
         }
         default:
-            errno = INVALID_VARIABLE_TYPE;
+            errno = ERR_INVALID_VAR_TYPE;
             return -1;
     }
     return 0;
@@ -145,7 +145,7 @@ int read_data_of_type(void* var, var_type type, int client_fd) {
  * @param client_fd Client connection file descriptor
  * @return 0 on success, -1 on error with errno set
  */
-int send_data_of_type(void* result, var_type type, int client_fd) {
+int send_data_of_type(void* result, var_type_e type, int client_fd) {
     // We cast signed integers to unsigned because bit integrity remains same
     switch (type) {
         case INT32: {
@@ -153,7 +153,7 @@ int send_data_of_type(void* result, var_type type, int client_fd) {
             memcpy(&copy, result, sizeof(copy));
             uint32_t net_val = htonl(copy);
             if (send_to_connection(client_fd, &net_val, sizeof(net_val)) < 0) {
-                errno = SERVER_ERROR_SENDING_RPC_RESULT;
+                errno = ERR_SEND_DATA_OF_TYPE;
                 return -1;
             }
             break;
@@ -163,7 +163,7 @@ int send_data_of_type(void* result, var_type type, int client_fd) {
             memcpy(&copy, result, sizeof(copy));
             uint32_t net_val = htonl(copy); // Use 64-bit conversion
             if (send_to_connection(client_fd, &net_val, sizeof(net_val)) < 0) {
-                errno = SERVER_ERROR_SENDING_RPC_RESULT;
+                errno = ERR_SEND_DATA_OF_TYPE;
                 return -1;
             }
             break;
@@ -173,13 +173,13 @@ int send_data_of_type(void* result, var_type type, int client_fd) {
             memcpy(&copy, result, sizeof(copy));
             uint16_t net_val = htons(copy); // Use 16-bit conversion
             if (send_to_connection(client_fd, &net_val, sizeof(net_val)) < 0) {
-                errno = SERVER_ERROR_SENDING_RPC_RESULT;
+                errno = ERR_SEND_DATA_OF_TYPE;
                 return -1;
             }
             break;
         }
         default:
-            errno = SERVER_INVALID_RESULT_TYPE;
+            errno = ERR_INVALID_VAR_TYPE;
             return -1;
     }
     return 0;

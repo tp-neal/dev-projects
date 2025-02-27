@@ -261,7 +261,7 @@ int setupServer(int* socket_fd, struct sockaddr_in* address, int port) {
  * @brief Handles an open system call from the client
  * 
  * @param client_fd Client connection file descriptor
- * @return 0 on success, -1 on error with errno set
+ * @return RP_SUCCESS on success, -1 on error with errno set
  */
 int handle_open(int client_fd) {
     // Set errno for early exit
@@ -269,10 +269,9 @@ int handle_open(int client_fd) {
 
     // Get file descriptor
     char* pathname = (char*)read_from_connection(client_fd);
-    if (!pathname) {
+    if (!pathname) 
         return -1;
-    }
-
+    
     // Get flags
     uint32_t flags;
     if (read_data_of_type(&flags, UINT32, client_fd) == -1) {
@@ -294,9 +293,8 @@ int handle_open(int client_fd) {
     int32_t result = (flags & O_CREAT) ?
         (int32_t) open(pathname, (int)flags, (mode_t)mode) :
         (int32_t) open(pathname, (int)flags);
-    if (return_result(client_fd, &result, INT32) == -1) {
+    if (return_result(client_fd, &result, INT32) == -1) 
         return -1;
-    }
     
     free(pathname);
     return RP_SUCCESS;
@@ -306,7 +304,7 @@ int handle_open(int client_fd) {
  * @brief Handles a close system call from the client
  * 
  * @param client_fd Client connection file descriptor
- * @return 0 on success, -1 on error with errno set
+ * @return RP_SUCCESS on success, -1 on error with errno set
  */
 int handle_close(int client_fd) {
     // Set errno for early exit
@@ -314,16 +312,14 @@ int handle_close(int client_fd) {
 
     // Get file descriptor
     uint32_t file_fd;
-    if (read_data_of_type(&file_fd, UINT32, client_fd) == -1) {
+    if (read_data_of_type(&file_fd, UINT32, client_fd) == -1) 
         return -1;
-    }
-
+    
     // Perform call and return results
     errno = 0;
     int32_t result = (int32_t)close(file_fd);
-    if (return_result(client_fd, &result, INT32) == -1) {
+    if (return_result(client_fd, &result, INT32) == -1) 
         return -1;
-    }
     
     return RP_SUCCESS;
 }
@@ -332,7 +328,7 @@ int handle_close(int client_fd) {
  * @brief Handles a read system call from the client
  * 
  * @param client_fd Client connection file descriptor
- * @return 0 on success, -1 on error with errno set
+ * @return RP_SUCCESS on success, -1 on error with errno set
  */
 int handle_read(int client_fd) {
     // Set errno for early exit
@@ -340,15 +336,13 @@ int handle_read(int client_fd) {
 
     // Get file descriptor
     uint32_t file_fd;
-    if (read_data_of_type(&file_fd, UINT32, client_fd) == -1) {
+    if (read_data_of_type(&file_fd, UINT32, client_fd) == -1) 
         return -1;
-    }
 
     // Get buffer
     char* buffer = (char*)read_from_connection(client_fd);
-    if (!buffer) {
+    if (!buffer) 
         return -1;
-    }
 
     // Get count
     uint32_t count;
@@ -360,10 +354,9 @@ int handle_read(int client_fd) {
     // Perform call and return results
     errno = 0;
     int32_t data_read = (int32_t)read(file_fd, buffer, count);
-    if (return_result(client_fd, &data_read, INT32) == -1) {
+    if (return_result(client_fd, &data_read, INT32) == -1) 
         return -1;
-    }
-
+    
     // Send back data if data was actually read
     if (data_read > 0) {
         if (send_to_connection(client_fd, buffer, data_read) == -1) {
@@ -380,7 +373,7 @@ int handle_read(int client_fd) {
  * @brief Handles a write system call from the client
  * 
  * @param client_fd Client connection file descriptor
- * @return 0 on success, -1 on error with errno set
+ * @return RP_SUCCESS on success, -1 on error with errno set
  */
 int handle_write(int client_fd) {
     // Set errno for early exit
@@ -388,15 +381,15 @@ int handle_write(int client_fd) {
 
     // Get file descriptor
     uint32_t file_fd;
-    if (read_data_of_type(&file_fd, UINT32, client_fd) == -1) {
+    if (read_data_of_type(&file_fd, UINT32, client_fd) == -1) 
         return -1;
-    }
+    
 
     // Get buffer
     char* buffer = (char*)read_from_connection(client_fd);
-    if (!buffer) {
+    if (!buffer) 
         return -1;
-    }
+    
 
     // Get count
     uint32_t count;
@@ -408,9 +401,9 @@ int handle_write(int client_fd) {
     // Perform call and return results
     errno = 0;
     int32_t data_wrote = (int32_t)write(file_fd, buffer, count);
-    if (return_result(client_fd, &data_wrote, INT32) == -1) {
+    if (return_result(client_fd, &data_wrote, INT32) == -1) 
         return -1;
-    }
+    
     
     free(buffer);
     return RP_SUCCESS;
@@ -420,7 +413,7 @@ int handle_write(int client_fd) {
  * @brief Handles a lseek system call from the client
  * 
  * @param client_fd Client connection file descriptor
- * @return 0 on success, -1 on error with errno set
+ * @return RP_SUCCESS on success, -1 on error with errno set
  */
 int handle_lseek(int client_fd) {
     // Set errno for early exit
@@ -428,28 +421,24 @@ int handle_lseek(int client_fd) {
 
     // Get file descriptor
     uint32_t file_fd;
-    if (read_data_of_type(&file_fd, UINT32, client_fd) == -1) {
+    if (read_data_of_type(&file_fd, UINT32, client_fd) == -1)
         return -1;
-    }
-
+    
     // Get offset
     int32_t offset;
-    if (read_data_of_type(&offset, INT32, client_fd) == -1) {
+    if (read_data_of_type(&offset, INT32, client_fd) == -1)
         return -1;
-    }
 
     // Get seek origin
     uint32_t whence;
-    if (read_data_of_type(&whence, UINT32, client_fd) == -1) {
+    if (read_data_of_type(&whence, UINT32, client_fd) == -1)
         return -1;
-    }
 
     // Perform call and return results
     errno = 0;
     int32_t result = (int32_t)lseek(file_fd, offset, whence);
-    if (return_result(client_fd, &result, INT32) == -1) {
+    if (return_result(client_fd, &result, INT32) == -1)
         return -1;
-    }
 
     return RP_SUCCESS;
 }
@@ -458,7 +447,7 @@ int handle_lseek(int client_fd) {
  * @brief Handles a checksum calculation request from the client
  * 
  * @param client_fd Client connection file descriptor
- * @return 0 on success, -1 on error with errno set
+ * @return RP_SUCCESS on success, -1 on error with errno set
  */
 int handle_checksum(int client_fd) {
     // Set errno for early exit
@@ -499,7 +488,7 @@ int handle_checksum(int client_fd) {
  * @param return_buffer Return buffer to be sent if RPC was a read, otherwise NULL
  * @return int 0 on success : -1 on error
  */
-int return_result(int client_fd, void* result_ptr, var_type type) {
+int return_result(int client_fd, void* result_ptr, var_type_e type) {
 
     // Copy int value of result
     int result;
