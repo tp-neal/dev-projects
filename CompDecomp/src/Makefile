@@ -3,6 +3,7 @@ CFLAGS = -Wall
 CC = gcc
 
 COMPILED_FILES = compress decompress bit_ops.o
+TEST_FILES_DIRECTORY="../canterbury"
 
 all: compress decompress bit_ops.o
 
@@ -17,6 +18,6 @@ bit_ops.o: bit_ops.c bit_ops.h
 
 clean:
 	rm -f $(COMPILED_FILES)
-	rm -f compress.c.czy compress.obj.czy compress.c.gz compress.obj.gz
+	rm -f "$(TEST_FILES_DIRECTORY)"/*.czy
 
 .PHONY: all clean

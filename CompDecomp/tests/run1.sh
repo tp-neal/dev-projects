@@ -28,4 +28,6 @@ echo "---------------------"
 for item in "${list[@]}"; do
     wc -c "$item"
 done
+
 echo ""
+echo "Script finished."
